@@ -384,7 +384,7 @@ export default function App() {
           />
         </Suspense>
 
-        {activeView && (
+        {activeView && activeView !== 'gigs' && (
           <div className="absolute inset-x-0 top-0 bottom-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+4rem))] z-10 bg-slate-50 dark:bg-slate-950 flex flex-col w-full animate-in fade-in duration-200">
             <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0 pt-[max(1rem,env(safe-area-inset-top,0px))]">
               <div className="flex items-center gap-3">
@@ -581,7 +581,7 @@ export default function App() {
                 <><button onClick={() => handleIconClick('tenant')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'tenant' ? 'text-blue-600 scale-110' : 'text-slate-500'}`}><Building2 className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">Tenant</span></button>
                 <button onClick={() => handleIconClick('referrals')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'referrals' ? 'text-blue-600 scale-110' : 'text-slate-500'}`}><Users className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">Referrals</span></button></>
               )}
-              <button onClick={() => handleIconClick('gigs')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'gigs' ? 'text-blue-600 scale-110' : 'text-slate-500'}`}><Briefcase className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">GiGs</span></button>
+              <button onClick={() => handleIconClick('gigs')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'gigs' ? 'text-blue-600 scale-110' : 'text-slate-500'}`}><MapIcon className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">GiGs</span></button>
               <button onClick={() => handleIconClick('seekers')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'seekers' ? 'text-blue-600 scale-110' : 'text-slate-500'}`}><Search className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">Seekers</span></button>
               <button onClick={() => handleIconClick('profile')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'profile' ? 'text-blue-600 scale-110' : 'text-slate-500'}`}>{profilePic ? <div className={`w-6 h-6 rounded-full overflow-hidden border ${activeView === 'profile' ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-200'}`}><img src={profilePic} className="w-full h-full object-cover" /></div> : <User className="w-5 h-5" />}<span className="text-[9px] font-bold uppercase">Profile</span></button>
             </div>
