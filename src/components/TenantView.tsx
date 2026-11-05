@@ -157,7 +157,7 @@ export const TenantView: React.FC<TenantViewProps> = ({
 
       {/* FULL-SCREEN NOTIFICATION OVERLAY */}
       {showNotifications && (
-        <div className="fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-xl flex flex-col p-4 sm:p-6 overflow-hidden animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[120] bg-slate-950/40 dark:bg-slate-950/65 backdrop-blur-xl backdrop-saturate-150 flex flex-col p-4 sm:p-6 overflow-hidden animate-in fade-in duration-200">
           {/* Top Bar */}
           <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
             <div className="flex items-center gap-3 text-white">
