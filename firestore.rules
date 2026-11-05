@@ -85,7 +85,7 @@ service cloud.firestore {
     // 4. Collection Matches
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && (isAdmin() || resource.data.invitedBy == request.auth.uid || resource.data.isActivated == true);
+      allow list: if isSignedIn();
       
       allow create: if isOwner(userId) && isValidUser(incoming()) && 
                     incoming().userId == request.auth.uid && 
