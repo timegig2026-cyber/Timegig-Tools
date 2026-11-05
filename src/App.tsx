@@ -26,6 +26,7 @@ import { TenantView } from './components/TenantView';
 import { ReferralsView } from './components/ReferralsView';
 import { SeekersView } from './components/SeekersView';
 import { ProfileView } from './components/ProfileView';
+import { PendingReferralReviewModal } from './components/PendingReferralReviewModal';
 
 const MapView = lazy(() => import('./components/MapView').then(m => ({ default: m.MapView })));
 const AuthView = lazy(() => import('./components/Auth').then(m => ({ default: m.AuthView })));
@@ -235,6 +236,10 @@ export default function App() {
     (s.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const pendingReferralsToReview = (activePlanType === 'tenant' || currentUser?.email === 'timegig2026@gmail.com')
+    ? referrals.filter(r => (!r.referralStatus || r.referralStatus === 'pending') && r.userId !== currentUser?.uid)
+    : [];
+
   // Sync Active Gig
   useEffect(() => {
     if (!currentUser) return;
@@ -429,6 +434,11 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <PendingReferralReviewModal 
+          pendingReferrals={pendingReferralsToReview} 
+          playClickSound={playClickSound} 
+        />
 
         {showSubModal && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
