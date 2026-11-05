@@ -58,12 +58,13 @@ service cloud.firestore {
     }
 
     function isValidSetting(data) {
-      let allowedKeys = ['userId', 'isSoundEnabled', 'isHudMinimized', 'updatedAt'];
+      let allowedKeys = ['userId', 'isSoundEnabled', 'isHudMinimized', 'deletedNotifications', 'updatedAt'];
       return data.keys().hasAll(['userId']) &&
              data.keys().hasOnly(allowedKeys) &&
              data.userId == request.auth.uid &&
              (!data.keys().hasAny(['isSoundEnabled']) || data.isSoundEnabled is bool) &&
-             (!data.keys().hasAny(['isHudMinimized']) || data.isHudMinimized is bool);
+             (!data.keys().hasAny(['isHudMinimized']) || data.isHudMinimized is bool) &&
+             (!data.keys().hasAny(['deletedNotifications']) || (data.deletedNotifications is list && data.deletedNotifications.size() <= 500));
     }
 
     function isValidGig(data) {
@@ -84,7 +85,7 @@ service cloud.firestore {
     // 4. Collection Matches
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && (resource.data.invitedBy == request.auth.uid || resource.data.isActivated == true);
+      allow list: if isSignedIn() && (isAdmin() || resource.data.invitedBy == request.auth.uid || resource.data.isActivated == true);
       
       allow create: if isOwner(userId) && isValidUser(incoming()) && 
                     incoming().userId == request.auth.uid && 

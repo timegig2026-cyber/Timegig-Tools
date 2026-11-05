@@ -19,7 +19,7 @@ import {
 import { TILE_PROVIDERS } from './utils/geo';
 import { 
   Zap, Building2, Users, Map as MapIcon, Search, User, ChevronLeft, Settings, LogOut, Volume2, VolumeX,
-  TrendingUp, Wallet, Copy, Share2, DollarSign, Loader2, CheckCircle2, MapPin
+  TrendingUp, Wallet, Copy, Share2, DollarSign, Loader2, CheckCircle2, MapPin, X
 } from 'lucide-react';
 
 import { TenantView } from './components/TenantView';
@@ -134,9 +134,19 @@ export default function App() {
     return onSnapshot(doc(db, 'users', currentUser.uid), (snap) => {
       if (snap.exists()) {
         const d = snap.data();
-        setIsActivated(d.isActivated || false);
+        const activated = d.isActivated || false;
+        setIsActivated(activated);
         setActivePlanType(d.planType || 'user');
         setProfilePic(d.profilePicUrl || null);
+
+        // Referrals / unactivated users MUST choose subscription first to use the app
+        if (!activated && currentUser.email !== 'timegig2026@gmail.com') {
+          setShowSubModal(true);
+        }
+      } else {
+        if (currentUser.email !== 'timegig2026@gmail.com') {
+          setShowSubModal(true);
+        }
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`));
   }, [currentUser?.uid]);
@@ -155,24 +165,63 @@ export default function App() {
   // Sync Referrals and Calculate Profit
   useEffect(() => {
     if (!currentUser) return;
-    const q = query(collection(db, 'users'), where('invitedBy', '==', currentUser.uid));
-    return onSnapshot(q, (snap) => {
-      const docs = snap.docs.map(d => d.data());
-      setReferrals(docs);
-      
-      let tProfit = 0;
-      let uProfit = 0;
-      docs.forEach(u => {
-        if (u.isActivated && u.referralStatus === 'approved') {
-          if (u.planType === 'tenant') tProfit += 299.99;
-          else uProfit += 29.99;
-        }
-      });
-      setTenantProfit(tProfit);
-      setUserProfit(uProfit);
-      setTotalProfit(tProfit + uProfit);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users (referrals)'));
-  }, [currentUser?.uid]);
+
+    if (currentUser.email === 'timegig2026@gmail.com') {
+      // Admin timegig2026@gmail.com receives:
+      // 1. Direct referrals
+      // 2. Referrals who joined without any tenant referral link
+      // 3. Referrals invited by non-tenants (User Sub accounts)
+      const qAll = collection(db, 'users');
+      return onSnapshot(qAll, (snap) => {
+        const allUsers = snap.docs.map(d => d.data());
+        
+        const userMap = new Map<string, any>();
+        allUsers.forEach(u => userMap.set(u.userId, u));
+
+        const routedReferrals = allUsers.filter(u => {
+          if (u.userId === currentUser.uid) return false;
+          if (!u.invitedBy) return true; // Joined without link
+          if (u.invitedBy === currentUser.uid) return true; // Direct referral
+          const inviter = userMap.get(u.invitedBy);
+          if (!inviter || inviter.planType !== 'tenant') return true; // Invited by User Sub account
+          return false;
+        });
+
+        setReferrals(routedReferrals);
+
+        let tProfit = 0;
+        let uProfit = 0;
+        routedReferrals.forEach(u => {
+          if (u.isActivated && u.referralStatus === 'approved') {
+            if (u.planType === 'tenant') tProfit += 299.99;
+            else uProfit += 29.99;
+          }
+        });
+        setTenantProfit(tProfit);
+        setUserProfit(uProfit);
+        setTotalProfit(tProfit + uProfit);
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'users (admin referrals)'));
+    } else {
+      // Standard Tenant Account receives referrals directly invited by their link
+      const q = query(collection(db, 'users'), where('invitedBy', '==', currentUser.uid));
+      return onSnapshot(q, (snap) => {
+        const docs = snap.docs.map(d => d.data());
+        setReferrals(docs);
+        
+        let tProfit = 0;
+        let uProfit = 0;
+        docs.forEach(u => {
+          if (u.isActivated && u.referralStatus === 'approved') {
+            if (u.planType === 'tenant') tProfit += 299.99;
+            else uProfit += 29.99;
+          }
+        });
+        setTenantProfit(tProfit);
+        setUserProfit(uProfit);
+        setTotalProfit(tProfit + uProfit);
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'users (referrals)'));
+    }
+  }, [currentUser?.uid, currentUser?.email]);
 
   // Sync Seekers (All activated users)
   useEffect(() => {
@@ -382,20 +431,29 @@ export default function App() {
         )}
 
         {showSubModal && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-            <div className="relative w-full max-w-xl max-h-[90dvh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden my-auto">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">Choose Plan</h2>
-                <button onClick={() => setShowSubModal(false)} className="p-1.5 text-slate-400"><ChevronLeft className="w-5 h-5" /></button>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-y-auto">
+            <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl flex flex-col overflow-hidden my-auto border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600">Subscription Required</span>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">Choose Subscription First To Use App</h2>
+                </div>
+                {(isActivated || currentUser?.email === 'timegig2026@gmail.com') && (
+                  <button onClick={() => setShowSubModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl">
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <div onClick={() => { setActivePlanType('tenant'); setShowSubModal(false); setIsKycModalOpen(true); }} className="p-5 rounded-2xl border-2 border-blue-500 bg-blue-50/50 cursor-pointer">
-                  <h3 className="font-bold text-blue-600 uppercase text-xs">Tenant Sub</h3>
-                  <p className="text-sm font-bold text-slate-900 mt-1">R299.99 / mo - Earn passive income.</p>
+                <div onClick={() => { setActivePlanType('tenant'); setShowSubModal(false); setIsKycModalOpen(true); }} className="p-5 rounded-2xl border-2 border-blue-500 bg-blue-50/60 dark:bg-blue-950/30 hover:bg-blue-100/60 cursor-pointer transition-all shadow-md active:scale-98">
+                  <span className="font-extrabold text-blue-600 uppercase text-xs tracking-wider">Tenant Subscription</span>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-1">R299.99 / month</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">Earn passive income, recruit referrals, manage user signups, and access all platform features.</p>
                 </div>
-                <div onClick={() => { setActivePlanType('user'); setShowSubModal(false); setIsKycModalOpen(true); }} className="p-5 rounded-2xl border-2 border-emerald-500 bg-emerald-50/50 cursor-pointer">
-                  <h3 className="font-bold text-emerald-600 uppercase text-xs">User Sub</h3>
-                  <p className="text-sm font-bold text-slate-900 mt-1">R29.99 / mo - Keep account active.</p>
+                <div onClick={() => { setActivePlanType('user'); setShowSubModal(false); setIsKycModalOpen(true); }} className="p-5 rounded-2xl border-2 border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 hover:bg-emerald-100/60 cursor-pointer transition-all shadow-md active:scale-98">
+                  <span className="font-extrabold text-emerald-600 uppercase text-xs tracking-wider">User Subscription</span>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-1">R29.99 / month</h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-2">Active seeker account, live navigation, gig requests, and full app map access.</p>
                 </div>
               </div>
             </div>

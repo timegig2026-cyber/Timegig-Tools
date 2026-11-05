@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { Wallet, Share2, Copy, Bell, Users, CheckCircle2, ChevronRight, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Wallet, Share2, Copy, Bell, Users, CheckCircle2, ChevronRight, X, Trash2, CheckSquare, Square, ShieldAlert } from 'lucide-react';
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { OperationType, handleFirestoreError } from '../utils/firestoreDiagnostics';
 
 interface TenantViewProps {
   totalProfit: number;
@@ -21,20 +24,95 @@ export const TenantView: React.FC<TenantViewProps> = ({
   onNavigateToReferrals
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // New/Pending referral alerts
-  const pendingAlerts = referrals.filter(r => !r.referralStatus || r.referralStatus === 'pending');
-  const unreadCount = pendingAlerts.length;
+  // Sync deleted notifications list from Firestore settings
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = onSnapshot(doc(db, 'settings', currentUser.uid), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.deletedNotifications)) {
+          setDeletedIds(data.deletedNotifications);
+        }
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, `settings/${currentUser.uid}`));
+
+    return () => unsub();
+  }, [currentUser?.uid]);
+
+  // Active referral notifications (excluding deleted ones)
+  const activeAlerts = referrals.filter(r => {
+    const id = r.userId || r.email;
+    return !deletedIds.includes(id);
+  });
+
+  const unreadCount = activeAlerts.filter(r => !r.referralStatus || r.referralStatus === 'pending').length;
 
   const handleToggleNotifications = () => {
     playClickSound();
     setShowNotifications(!showNotifications);
   };
 
+  const handleToggleSelect = (id: string) => {
+    playClickSound();
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(i => i !== id));
+    } else {
+      setSelectedIds([...selectedIds, id]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    playClickSound();
+    if (selectedIds.length === activeAlerts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(activeAlerts.map(r => r.userId || r.email));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    playClickSound();
+
+    const updatedDeleted = Array.from(new Set([...deletedIds, ...selectedIds]));
+    setDeletedIds(updatedDeleted);
+    setSelectedIds([]);
+
+    try {
+      await setDoc(doc(db, 'settings', currentUser.uid), {
+        userId: currentUser.uid,
+        deletedNotifications: updatedDeleted,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `settings/${currentUser.uid}`);
+    }
+  };
+
+  const handleDeleteSingle = async (id: string) => {
+    playClickSound();
+    const updatedDeleted = Array.from(new Set([...deletedIds, id]));
+    setDeletedIds(updatedDeleted);
+    setSelectedIds(selectedIds.filter(i => i !== id));
+
+    try {
+      await setDoc(doc(db, 'settings', currentUser.uid), {
+        userId: currentUser.uid,
+        deletedNotifications: updatedDeleted,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `settings/${currentUser.uid}`);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-xl mx-auto">
       {/* Top Banner Card with Notification Bell */}
-      <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
         <div className="flex items-center justify-between mb-4 z-10 relative">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
@@ -48,72 +126,19 @@ export const TenantView: React.FC<TenantViewProps> = ({
             </div>
           </div>
 
-          {/* Top Corner Notification Icon with Sound */}
-          <div className="relative">
-            <button 
-              onClick={handleToggleNotifications}
-              className="p-3 bg-white/10 hover:bg-white/20 active:scale-95 transition-all rounded-2xl border border-white/20 relative shadow-md"
-              title="Referral Alerts"
-            >
-              <Bell className="w-5 h-5 text-white" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-blue-600 animate-pulse">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-
-            {/* Notification Dropdown Panel */}
-            {showNotifications && (
-              <div className="absolute right-0 top-14 w-80 sm:w-96 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in slide-in-from-top-2 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-blue-600" />
-                    <h3 className="text-xs font-bold">Referral Notifications</h3>
-                  </div>
-                  <button onClick={() => setShowNotifications(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {pendingAlerts.length === 0 ? (
-                  <div className="py-6 text-center text-slate-400 space-y-1">
-                    <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500 opacity-60" />
-                    <p className="text-xs font-semibold">No pending referral alerts</p>
-                    <p className="text-[10px]">New referral signups will notify you here.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {pendingAlerts.map((ref, idx) => (
-                      <div key={idx} className="p-3 bg-blue-50/80 dark:bg-slate-800/80 rounded-2xl border border-blue-100 dark:border-slate-700 flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[180px]">
-                            {ref.email}
-                          </p>
-                          <span className="text-[10px] text-blue-600 font-semibold uppercase">
-                            New Signup ({ref.planType || 'User'} Sub)
-                          </span>
-                        </div>
-                        {onNavigateToReferrals && (
-                          <button 
-                            onClick={() => {
-                              playClickSound();
-                              setShowNotifications(false);
-                              onNavigateToReferrals();
-                            }}
-                            className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded-xl flex items-center gap-1 shadow-sm shrink-0"
-                          >
-                            Review
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+          {/* Top Corner Notification Icon */}
+          <button 
+            onClick={handleToggleNotifications}
+            className="p-3 bg-white/10 hover:bg-white/20 active:scale-95 transition-all rounded-2xl border border-white/20 relative shadow-md cursor-pointer"
+            title="Referral Alerts"
+          >
+            <Bell className="w-5 h-5 text-white" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5.5 h-5.5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-blue-600 animate-pulse">
+                {unreadCount}
+              </span>
             )}
-          </div>
+          </button>
         </div>
 
         <h3 className="text-3xl font-black">R{totalProfit.toFixed(2)}</h3>
@@ -129,6 +154,148 @@ export const TenantView: React.FC<TenantViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* FULL-SCREEN NOTIFICATION OVERLAY */}
+      {showNotifications && (
+        <div className="fixed inset-0 z-[120] bg-slate-950/90 backdrop-blur-xl flex flex-col p-4 sm:p-6 overflow-hidden animate-in fade-in duration-200">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
+            <div className="flex items-center gap-3 text-white">
+              <div className="p-2.5 bg-blue-600 rounded-2xl shadow-lg">
+                <Bell className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">Referral Notifications</h2>
+                <p className="text-xs text-slate-400">
+                  {activeAlerts.length} total alerts ({unreadCount} pending review)
+                </p>
+              </div>
+            </div>
+
+            <button 
+              onClick={() => { playClickSound(); setShowNotifications(false); }}
+              className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-transform active:scale-95 shadow"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Action Toolbar (Select / Delete) */}
+          {activeAlerts.length > 0 && (
+            <div className="py-3 flex items-center justify-between gap-3 shrink-0 border-b border-white/10 text-xs">
+              <button
+                onClick={handleSelectAll}
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold border border-white/15 flex items-center gap-2 active:scale-95 transition-all"
+              >
+                {selectedIds.length === activeAlerts.length ? (
+                  <CheckSquare className="w-4 h-4 text-blue-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-400" />
+                )}
+                <span>
+                  {selectedIds.length === activeAlerts.length ? 'Deselect All' : 'Select All'}
+                </span>
+              </button>
+
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedIds.length === 0}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-800 text-white font-bold flex items-center gap-2 shadow-lg disabled:opacity-40 active:scale-95 transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Selected ({selectedIds.length})</span>
+              </button>
+            </div>
+          )}
+
+          {/* Scrollable Notifications List */}
+          <div className="flex-1 overflow-y-auto py-4 space-y-3">
+            {activeAlerts.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 space-y-3">
+                <CheckCircle2 className="w-16 h-16 text-emerald-500/80" />
+                <div>
+                  <h3 className="text-base font-bold text-white">All Caught Up!</h3>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto mt-1">
+                    You have no referral notifications. New user signups under your link will appear here.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              activeAlerts.map((ref, idx) => {
+                const id = ref.userId || ref.email || String(idx);
+                const isSelected = selectedIds.includes(id);
+                const status = ref.referralStatus || 'pending';
+
+                return (
+                  <div 
+                    key={id}
+                    onClick={() => handleToggleSelect(id)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center gap-3.5 ${
+                      isSelected 
+                        ? 'bg-blue-900/40 border-blue-500 text-white shadow-xl' 
+                        : 'bg-white/10 hover:bg-white/15 border-white/15 text-slate-100'
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <div className="shrink-0" onClick={(e) => { e.stopPropagation(); handleToggleSelect(id); }}>
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-blue-400" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-500 hover:text-slate-300" />
+                      )}
+                    </div>
+
+                    {/* Avatar / Info */}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold truncate text-white">{ref.email}</p>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                          status === 'approved' 
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : status === 'rejected'
+                            ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        }`}>
+                          {status}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300">
+                        Joined via tenant link ({ref.planType || 'User'} Subscription)
+                      </p>
+                    </div>
+
+                    {/* Quick Review / Delete Buttons */}
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {onNavigateToReferrals && (
+                        <button
+                          onClick={() => {
+                            playClickSound();
+                            setShowNotifications(false);
+                            onNavigateToReferrals();
+                          }}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow"
+                        >
+                          <span>Review</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleDeleteSingle(id)}
+                        className="p-2 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 rounded-xl transition-colors border border-rose-500/30"
+                        title="Delete Notification"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Share Link Card */}
       <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md rounded-3xl border border-white/30 dark:border-slate-800 p-6 space-y-4 shadow-2xl">
