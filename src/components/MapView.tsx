@@ -23,6 +23,9 @@ interface MapViewProps {
     durationMins: number;
     arrivalTimeStr: string;
   } | null;
+  recenterTrigger: number;
+  isHudMinimized: boolean;
+  onToggleHud: () => void;
   onCancelNavigation: () => void;
 }
 
@@ -38,6 +41,9 @@ export const MapView: React.FC<MapViewProps> = ({
   showTrack,
   highlightLocation,
   navigationRoute,
+  recenterTrigger,
+  isHudMinimized,
+  onToggleHud,
   onCancelNavigation,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -55,8 +61,8 @@ export const MapView: React.FC<MapViewProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    const initialLat = userLocation ? userLocation.latitude : 37.7749;
-    const initialLon = userLocation ? userLocation.longitude : -122.4194;
+    const initialLat = userLocation ? userLocation.latitude : -33.9249;
+    const initialLon = userLocation ? userLocation.longitude : 18.4241;
     const initialZoom = userLocation ? 15 : 12;
 
     const map = L.map(mapContainerRef.current, {
@@ -279,13 +285,15 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  const [isHudMinimized, setIsHudMinimized] = React.useState(() => {
-    return localStorage.getItem('timegig_hud_minimized') === 'true';
-  });
+  const lastProcessedTriggerRef = useRef<number>(0);
 
+  // Handle Recenter Trigger
   useEffect(() => {
-    localStorage.setItem('timegig_hud_minimized', String(isHudMinimized));
-  }, [isHudMinimized]);
+    if (recenterTrigger > lastProcessedTriggerRef.current && mapInstanceRef.current && userLocation) {
+      mapInstanceRef.current.setView([userLocation.latitude, userLocation.longitude], 15, { animate: true });
+      lastProcessedTriggerRef.current = recenterTrigger;
+    }
+  }, [recenterTrigger, userLocation]);
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-100 dark:bg-slate-950">
@@ -301,7 +309,7 @@ export const MapView: React.FC<MapViewProps> = ({
             </span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setIsHudMinimized(!isHudMinimized)}
+                onClick={onToggleHud}
                 className="text-xs text-slate-400 hover:text-white underline underline-offset-2"
               >
                 {isHudMinimized ? 'Expand' : 'Hide Box'}

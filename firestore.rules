@@ -2,12 +2,12 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global Safety Net
+    // 1. Global Safety Net
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Helper Primitives
+    // 2. Reusable Helpers
     function isSignedIn() {
       return request.auth != null;
     }
@@ -20,32 +20,110 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Entity Validations
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'timegig2026@gmail.com';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Entity Validations
     function isValidUser(data) {
+      let allowedKeys = ['userId', 'email', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'createdAt', 'updatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups'];
       return data.keys().hasAll(['userId', 'email']) &&
-             data.keys().hasOnly(['userId', 'email', 'planType', 'isActivated', 'profilePicUrl', 'createdAt']) &&
-             data.userId == request.auth.uid &&
-             data.email is string &&
-             data.email.size() <= 256;
+             data.keys().hasOnly(allowedKeys) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.email is string && data.email.size() <= 128 &&
+             (!data.keys().hasAny(['invitedBy']) || (data.invitedBy is string && data.invitedBy.size() <= 128)) &&
+             (!data.keys().hasAny(['planType']) || data.planType in ['tenant', 'user']) &&
+             (!data.keys().hasAny(['isActivated']) || data.isActivated is bool) &&
+             (!data.keys().hasAny(['isAdmin']) || data.isAdmin is bool) &&
+             (!data.keys().hasAny(['profilePicUrl']) || (data.profilePicUrl is string && data.profilePicUrl.size() <= 2048)) &&
+             (!data.keys().hasAny(['tenantCapacity']) || data.tenantCapacity is number) &&
+             (!data.keys().hasAny(['userCapacity']) || data.userCapacity is number) &&
+             (!data.keys().hasAny(['tenantSubSignups']) || data.tenantSubSignups is number) &&
+             (!data.keys().hasAny(['userSubSignups']) || data.userSubSignups is number);
     }
 
     function isValidSetting(data) {
+      let allowedKeys = ['userId', 'isSoundEnabled', 'isHudMinimized', 'updatedAt'];
       return data.keys().hasAll(['userId']) &&
-             data.keys().hasOnly(['userId', 'isSoundEnabled', 'isHudMinimized', 'updatedAt']) &&
-             data.userId == request.auth.uid;
+             data.keys().hasOnly(allowedKeys) &&
+             data.userId == request.auth.uid &&
+             (!data.keys().hasAny(['isSoundEnabled']) || data.isSoundEnabled is bool) &&
+             (!data.keys().hasAny(['isHudMinimized']) || data.isHudMinimized is bool);
     }
 
-    // Collection Rules
+    function isValidGig(data) {
+      let allowedKeys = ['ownerId', 'seekerId', 'status', 'destination', 'createdAt', 'updatedAt', 'cancelReason', 'cancelledBy'];
+      return data.keys().hasAll(['ownerId', 'seekerId', 'status', 'destination']) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.ownerId is string && data.ownerId.size() <= 128 &&
+             data.seekerId is string && data.seekerId.size() <= 128 &&
+             data.status in ['pending', 'accepted', 'completed', 'cancelled'] &&
+             data.destination is map &&
+             data.destination.keys().hasAll(['lat', 'lon', 'name']) &&
+             data.destination.keys().hasOnly(['lat', 'lon', 'name']) &&
+             data.destination.lat is number &&
+             data.destination.lon is number &&
+             data.destination.name is string && data.destination.name.size() <= 256;
+    }
+
+    // 4. Collection Matches
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (resource.data.invitedBy == request.auth.uid || resource.data.isActivated == true);
+      
+      allow create: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().userId == request.auth.uid && 
+                    (!incoming().keys().hasAny(['isAdmin']) || isAdmin());
+      
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) && (
+        // Action: Profile Update (Owner only, restricted fields, cannot change isAdmin)
+        (isOwner(userId) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['profilePicUrl', 'planType', 'isActivated', 'updatedAt']) && 
+         (!incoming().keys().hasAny(['isAdmin']) || incoming().isAdmin == existing().isAdmin)) ||
+        // Action: Admin Full Access
+        isAdmin()
+      );
+      
+      allow delete: if isAdmin();
     }
 
     match /settings/{userId} {
       allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidSetting(request.resource.data);
-      allow update: if isOwner(userId) && isValidSetting(request.resource.data);
+      allow write: if isOwner(userId) && isValidSetting(incoming());
+    }
+
+    match /gigs/{gigId} {
+      function isGigParticipant() {
+        return isSignedIn() && (existing().ownerId == request.auth.uid || existing().seekerId == request.auth.uid);
+      }
+
+      allow get: if isGigParticipant() || isAdmin();
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || resource.data.seekerId == request.auth.uid);
+
+      allow create: if isSignedIn() && isValidGig(incoming()) && incoming().ownerId == request.auth.uid;
+
+      allow update: if (isGigParticipant() || isAdmin()) && isValidGig(incoming()) && (
+        // Terminal state check
+        existing().status in ['completed', 'cancelled'] == false || isAdmin()
+      ) && (
+        // Action: Accept (Seeker only)
+        (existing().seekerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().status == 'accepted') ||
+        // Action: Complete (Owner only)
+        (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().status == 'completed') ||
+        // Action: Cancel
+        (incoming().status == 'cancelled' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelReason', 'cancelledBy', 'updatedAt'])) ||
+        isAdmin()
+      );
+
+      allow delete: if isAdmin();
     }
   }
 }

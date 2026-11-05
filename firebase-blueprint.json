@@ -5,11 +5,12 @@
       "description": "User profile and activation status",
       "type": "object",
       "properties": {
-        "userId": { "type": "string", "description": "The Firebase Auth UID" },
+        "userId": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "planType": { "type": "string", "enum": ["tenant", "user"] },
         "isActivated": { "type": "boolean" },
         "profilePicUrl": { "type": "string" },
+        "invitedBy": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "email"]
@@ -25,6 +26,23 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId"]
+    },
+    "Gig": {
+      "title": "Gig",
+      "description": "A gig service agreement between a user and a seeker",
+      "type": "object",
+      "properties": {
+        "gigId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "seekerId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "completed", "cancelled"] },
+        "cancelReason": { "type": "string" },
+        "cancelledBy": { "type": "string" },
+        "destination": { "type": "object", "properties": { "lat": { "type": "number" }, "lon": { "type": "number" }, "name": { "type": "string" } } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["gigId", "ownerId", "seekerId", "status"]
     }
   },
   "firestore": {
@@ -35,6 +53,10 @@
     "/settings/{userId}": {
       "schema": "Setting",
       "description": "User settings"
+    },
+    "/gigs/{gigId}": {
+      "schema": "Gig",
+      "description": "Gig transaction records"
     }
   }
 }

@@ -115,12 +115,12 @@ export function formatCoordinatePair(lat: number, lon: number): string {
  * Preset locations for testing without GPS / sandbox simulation
  */
 export const PRESET_LOCATIONS = [
-  { name: 'San Francisco, CA', lat: 37.7749, lon: -122.4194 },
-  { name: 'London, UK', lat: 51.5074, lon: -0.1278 },
-  { name: 'Paris, France', lat: 48.8566, lon: 2.3522 },
-  { name: 'Tokyo, Japan', lat: 35.6762, lon: 139.6503 },
-  { name: 'Sydney, Australia', lat: -33.8688, lon: 151.2093 },
-  { name: 'Berlin, Germany', lat: 52.52, lon: 13.405 },
+  { name: 'Cape Town, WC', lat: -33.9249, lon: 18.4241 },
+  { name: 'Johannesburg, GP', lat: -26.2041, lon: 28.0473 },
+  { name: 'Durban, KZN', lat: -29.8587, lon: 31.0218 },
+  { name: 'Pretoria, GP', lat: -25.7479, lon: 28.2293 },
+  { name: 'Gqeberha, EC', lat: -33.9608, lon: 25.6022 },
+  { name: 'Bloemfontein, FS', lat: -29.1181, lon: 26.2232 },
 ];
 
 /**

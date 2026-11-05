@@ -1,6 +1,6 @@
 {
-  "name": "OpenMap Geolocation Template",
-  "description": "An interactive OpenStreetMap web template featuring live user geolocation tracking, reverse geocoding, custom waypoints, layer styles, and exportable spatial data with zero API costs.",
+  "name": "TimeGiG",
+  "description": "TimeGiG connects people who need work done with people looking for work across South Africa.",
   "requestFramePermissions": ["geolocation", "camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
