@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, onSnapshot, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 
-import { MapView } from './components/MapView';
 import { SearchBox } from './components/SearchBox';
 import { SplashScreen } from './components/SplashScreen';
-import { AuthView } from './components/Auth';
-import { SubscriptionModal } from './components/SubscriptionModal';
 import {
   LocationCoords,
   GeolocationStatus,
@@ -16,8 +13,14 @@ import {
 } from './types/map';
 import { TILE_PROVIDERS } from './utils/geo';
 import { 
-  Zap, Building2, Users, Briefcase, Search, User, ChevronLeft, Settings, LogOut, Volume2, VolumeX 
+  Zap, Building2, Users, Briefcase, Search, User, ChevronLeft, Settings, LogOut, Volume2, VolumeX,
+  TrendingUp, Wallet, Copy, Share2, DollarSign 
 } from 'lucide-react';
+
+// Lazy load heavy components for faster initial paint
+const MapView = lazy(() => import('./components/MapView').then(m => ({ default: m.MapView })));
+const AuthView = lazy(() => import('./components/Auth').then(m => ({ default: m.AuthView })));
+const SubscriptionModal = lazy(() => import('./components/SubscriptionModal').then(m => ({ default: m.SubscriptionModal })));
 
 // Default initial waypoints for showcase
 const DEFAULT_WAYPOINTS: Waypoint[] = [
@@ -87,13 +90,19 @@ export default function App() {
   } | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
 
-  // Sound effect helper
+  // Sound effect helper - pre-instantiate Audio for speed
+  const clickAudioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    clickAudioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
+    clickAudioRef.current.volume = 0.4;
+    clickAudioRef.current.load();
+  }, []);
+
   const playClickSound = () => {
-    if (!isSoundEnabled) return;
+    if (!isSoundEnabled || !clickAudioRef.current) return;
     try {
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
-      audio.volume = 0.4;
-      audio.play().catch(() => {});
+      clickAudioRef.current.currentTime = 0;
+      clickAudioRef.current.play().catch(() => {});
     } catch (e) {
       console.warn('Sound play failed');
     }
@@ -268,8 +277,18 @@ export default function App() {
 
   // Rendering conditions
   if (showSplash) return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  if (isAuthLoading) return <div className="fixed inset-0 bg-slate-950 flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>;
-  if (!currentUser) return <AuthView />;
+  
+  if (isAuthLoading) return (
+    <div className="fixed inset-0 bg-slate-950 flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  if (!currentUser) return (
+    <Suspense fallback={<div className="fixed inset-0 bg-slate-950" />}>
+      <AuthView />
+    </Suspense>
+  );
 
   return (
     <div className="fixed inset-0 h-[100dvh] w-full max-w-full overflow-hidden bg-slate-950 font-sans flex flex-col">
@@ -324,22 +343,22 @@ export default function App() {
         )}
 
         {/* KYC Modal */}
-        <SubscriptionModal
-          isOpen={isKycModalOpen}
-          onClose={() => setIsKycModalOpen(false)}
-          planType={activePlanType}
-          onSuccess={async (plan, picUrl) => {
-            setIsKycModalOpen(false);
-            import('./lib/firebase').then(async ({ db }) => {
+        <Suspense fallback={null}>
+          <SubscriptionModal
+            isOpen={isKycModalOpen}
+            onClose={() => setIsKycModalOpen(false)}
+            planType={activePlanType}
+            onSuccess={async (plan, picUrl) => {
+              setIsKycModalOpen(false);
               const { doc, updateDoc } = await import('firebase/firestore');
               await updateDoc(doc(db, 'users', currentUser!.uid), {
                 isActivated: true,
                 planType: plan,
                 profilePicUrl: picUrl || null
               });
-            });
-          }}
-        />
+            }}
+          />
+        </Suspense>
 
         {/* Feature Views */}
         {activeView && (
@@ -371,10 +390,8 @@ export default function App() {
                       <button onClick={async () => {
                         const newVal = !isSoundEnabled;
                         setIsSoundEnabled(newVal);
-                        import('./lib/firebase').then(async ({ db }) => {
-                          const { doc, updateDoc } = await import('firebase/firestore');
-                          await updateDoc(doc(db, 'settings', currentUser!.uid), { isSoundEnabled: newVal, updatedAt: new Date().toISOString() });
-                        });
+                        const { doc, updateDoc } = await import('firebase/firestore');
+                        await updateDoc(doc(db, 'settings', currentUser!.uid), { isSoundEnabled: newVal, updatedAt: new Date().toISOString() });
                         if (newVal) playClickSound();
                       }} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isSoundEnabled ? 'bg-blue-600' : 'bg-slate-200 dark:bg-slate-700'}`}>
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSoundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -386,10 +403,104 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+              ) : activeView === 'tenant' ? (
+                <div className="p-6 space-y-6">
+                  {/* Profit Overview Cards */}
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-6 text-white shadow-xl shadow-blue-500/20">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md">
+                          <Wallet className="w-6 h-6 text-white" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full backdrop-blur-md">Total Profit</span>
+                      </div>
+                      <p className="text-sm font-medium opacity-80">Accumulated Earnings</p>
+                      <h3 className="text-3xl font-black tabular-nums mt-1">R0.00</h3>
+                      <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-2 text-xs font-bold">
+                        <TrendingUp className="w-4 h-4" />
+                        <span>0% increase this month</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl w-fit mb-3">
+                          <Building2 className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tenant Subs</p>
+                        <h4 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">R0.00</h4>
+                      </div>
+                      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-xl w-fit mb-3">
+                          <User className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">User Subs</p>
+                        <h4 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">R0.00</h4>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Referral Section */}
+                  <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 text-amber-600">
+                        <Share2 className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white">Tenant Network</h3>
+                        <p className="text-xs text-slate-500">Build your network and earn from referrals</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 space-y-3">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider ml-1">Your Referral Link</p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-xl text-xs font-mono text-slate-600 dark:text-slate-300 truncate">
+                          https://timegig.app/ref/{currentUser?.uid.slice(0, 8)}
+                        </div>
+                        <button 
+                          onClick={() => {
+                            playClickSound();
+                            navigator.clipboard.writeText(`https://timegig.app/ref/${currentUser?.uid.slice(0, 8)}`);
+                          }}
+                          className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20"
+                        >
+                          <Copy className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        playClickSound();
+                        if (navigator.share) {
+                          navigator.share({
+                            title: 'Join TimeGiG',
+                            text: 'Become a tenant on TimeGiG and earn passive income!',
+                            url: `https://timegig.app/ref/${currentUser?.uid.slice(0, 8)}`
+                          });
+                        }
+                      }}
+                      className="w-full py-4 bg-slate-900 dark:bg-slate-800 text-white text-sm font-bold rounded-2xl flex items-center justify-center gap-2 transition-transform active:scale-95"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Share Referral Link</span>
+                    </button>
+                  </div>
+
+                  {/* Passive Income Info */}
+                  <div className="p-5 bg-blue-50 dark:bg-blue-950/20 rounded-3xl border border-blue-100 dark:border-blue-900/50">
+                    <div className="flex gap-4">
+                      <div className="mt-1"><DollarSign className="w-5 h-5 text-blue-600" /></div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-blue-900 dark:text-blue-300">Passive Monthly Income</h4>
+                        <p className="text-xs text-blue-700/70 dark:text-blue-400/70 leading-relaxed">
+                          Earn a percentage from every User and Tenant subscription within your network. Payouts are processed on the 1st of every month.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center p-8 text-center space-y-6 h-full">
                   <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-300 dark:text-slate-700 overflow-hidden border-2 border-slate-200 dark:border-slate-800">
-                    {activeView === 'tenant' && <Building2 className="w-12 h-12" />}
                     {activeView === 'referrals' && <Users className="w-12 h-12" />}
                     {activeView === 'gigs' && <Briefcase className="w-12 h-12" />}
                     {activeView === 'seekers' && <Search className="w-12 h-12" />}
@@ -406,13 +517,15 @@ export default function App() {
           </div>
         )}
 
-        <MapView
-          userLocation={userLocation} tileProvider={tileProvider} onSelectTileProvider={setTileProvider}
-          followUser={followUser} onToggleFollowUser={() => setFollowUser(!followUser)}
-          onRecenterUser={handleRecenter} waypoints={waypoints} trackPoints={trackPoints}
-          showTrack={showTrack && isActivated} highlightLocation={highlightLocation}
-          navigationRoute={navigationRoute} onCancelNavigation={() => setNavigationRoute(null)}
-        />
+        <Suspense fallback={<div className="w-full h-full bg-slate-900 animate-pulse" />}>
+          <MapView
+            userLocation={userLocation} tileProvider={tileProvider} onSelectTileProvider={setTileProvider}
+            followUser={followUser} onToggleFollowUser={() => setFollowUser(!followUser)}
+            onRecenterUser={handleRecenter} waypoints={waypoints} trackPoints={trackPoints}
+            showTrack={showTrack && isActivated} highlightLocation={highlightLocation}
+            navigationRoute={navigationRoute} onCancelNavigation={() => setNavigationRoute(null)}
+          />
+        </Suspense>
 
         {/* Bottom Menu */}
         <div className="absolute bottom-0 inset-x-0 z-20 flex items-center justify-center px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shadow-2xl">

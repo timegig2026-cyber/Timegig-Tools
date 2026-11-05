@@ -6,12 +6,13 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { Mail, Lock, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, Loader2, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
   const [isSignup, setIsSignup] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,10 +27,11 @@ export const AuthView: React.FC = () => {
     }
 
     setLoading(true);
+    const sanitizedEmail = email.trim().toLowerCase();
 
     try {
       if (isSignup) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, sanitizedEmail, password);
         const user = userCredential.user;
 
         // Initialize user document
@@ -50,18 +52,37 @@ export const AuthView: React.FC = () => {
         });
 
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth, sanitizedEmail, password);
       }
     } catch (err: any) {
       console.error('Auth error:', err);
-      if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already in use. Try logging in instead.');
-      } else if (err.code === 'auth/invalid-credential') {
-        setError('Invalid email or password.');
-      } else if (err.code === 'auth/weak-password') {
-        setError('Password should be at least 6 characters.');
-      } else {
-        setError(err.message || 'Authentication failed.');
+      // Map Firebase error codes to user-friendly messages
+      const errorCode = err.code;
+      
+      switch (errorCode) {
+        case 'auth/email-already-in-use':
+          setError('This email is already registered. Please sign in instead.');
+          setIsSignup(false); // Automatically switch to login
+          break;
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          setError('The email or password you entered is incorrect. Please check and try again.');
+          break;
+        case 'auth/weak-password':
+          setError('Your password is too weak. Please use at least 6 characters.');
+          break;
+        case 'auth/invalid-email':
+          setError('Please enter a valid email address.');
+          break;
+        case 'auth/too-many-requests':
+          setError('Too many failed attempts. Access to this account has been temporarily disabled. Please try again later.');
+          break;
+        case 'auth/network-request-failed':
+          setError('Network error. Please check your internet connection and try again.');
+          break;
+        default:
+          setError(err.message || 'An unexpected error occurred during authentication.');
       }
     } finally {
       setLoading(false);
@@ -128,13 +149,21 @@ export const AuthView: React.FC = () => {
                 <Lock className="w-5 h-5" />
               </div>
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-slate-900 dark:text-white"
+                className="w-full pl-12 pr-12 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-slate-900 dark:text-white"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
