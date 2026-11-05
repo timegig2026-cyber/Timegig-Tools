@@ -8,7 +8,7 @@ import {
   TileProvider,
 } from './types/map';
 import { TILE_PROVIDERS } from './utils/geo';
-import { Zap, Cpu } from 'lucide-react';
+import { Zap, Cpu, Building2, Users, Briefcase, Search, User, Share2, Map as MapIcon, ChevronLeft } from 'lucide-react';
 import { SubscriptionModal } from './components/SubscriptionModal';
 
 // Default initial waypoints for showcase
@@ -45,11 +45,18 @@ export default function App() {
   const [followUser, setFollowUser] = useState<boolean>(true);
   const watchIdRef = useRef<number | null>(null);
 
-  // Activation feature state
-  const [isActivated, setIsActivated] = useState<boolean>(true);
   const [showSubModal, setShowSubModal] = useState<boolean>(false);
-  const [activePlanType, setActivePlanType] = useState<'tenant' | 'user'>('tenant');
+  const [activePlanType, setActivePlanType] = useState<'tenant' | 'user'>(() => {
+    return (localStorage.getItem('timegig_plan_type') as 'tenant' | 'user') || 'tenant';
+  });
   const [isKycModalOpen, setIsKycModalOpen] = useState<boolean>(false);
+  const [profilePic, setProfilePic] = useState<string | null>(() => {
+    return localStorage.getItem('timegig_profile_pic') || null;
+  });
+  const [isActivated, setIsActivated] = useState<boolean>(() => {
+    return localStorage.getItem('timegig_activated') === 'true';
+  });
+  const [activeView, setActiveView] = useState<string | null>(null);
 
   // Waypoints state
   const [waypoints] = useState<Waypoint[]>(() => {
@@ -285,11 +292,28 @@ export default function App() {
     setShowSubModal(true);
   };
 
+  // Persist state changes
+  useEffect(() => {
+    localStorage.setItem('timegig_activated', String(isActivated));
+  }, [isActivated]);
+
+  useEffect(() => {
+    localStorage.setItem('timegig_plan_type', activePlanType);
+  }, [activePlanType]);
+
+  useEffect(() => {
+    localStorage.setItem('timegig_follow_user', String(followUser));
+  }, [followUser]);
+
+  useEffect(() => {
+    localStorage.setItem('timegig_tile_provider', tileProvider.id);
+  }, [tileProvider]);
+
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans">
-      <div className="relative flex-1 h-full w-full">
-        {/* Floating Larger Search Bar at Top */}
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[480px] md:w-[540px]">
+    <div className="fixed inset-0 h-[100dvh] w-full max-w-full overflow-hidden bg-slate-950 font-sans flex flex-col">
+      <div className="relative flex-1 h-full w-full overflow-hidden">
+        {/* Floating Search Bar at Top with Safe Area Spacing */}
+        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-20 w-[92%] sm:w-[480px] md:w-[540px] max-w-xl">
           <SearchBox
             onSelectLocation={handleSelectSearchLocation}
           />
@@ -297,7 +321,7 @@ export default function App() {
 
         {/* Navigation Prompt Modal */}
         {pendingDestination && (
-          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-40 w-[90%] sm:w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in fade-in slide-in-from-top-4">
+          <div className="absolute top-[max(4.75rem,calc(env(safe-area-inset-top,0px)+4.25rem))] left-1/2 -translate-x-1/2 z-40 w-[92%] sm:w-md max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-5 animate-in fade-in slide-in-from-top-4">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">
               Start Navigation?
             </h3>
@@ -322,13 +346,13 @@ export default function App() {
           </div>
         )}
 
-        {/* Subscription Selection Modal */}
+        {/* Subscription Selection Modal - Fits screen without hiding corners */}
         {showSubModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="relative w-full max-w-xl max-h-[90vh] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-y-auto p-6 sm:p-8 space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+            <div className="relative w-full max-w-xl max-h-[min(90dvh,calc(100dvh-2rem))] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden my-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 shrink-0">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
                     Choose Subscription Tier
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -337,65 +361,67 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => setShowSubModal(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition-colors"
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition-colors"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Tenant Sub Option */}
-                <div
-                  onClick={() => {
-                    setActivePlanType('tenant');
-                    setShowSubModal(false);
-                    setIsKycModalOpen(true);
-                  }}
-                  className="group cursor-pointer p-5 rounded-2xl border-2 border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 hover:shadow-lg transition-all flex flex-col justify-between"
-                >
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                      Passive Income
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Tenant Sub Option */}
+                  <div
+                    onClick={() => {
+                      setActivePlanType('tenant');
+                      setShowSubModal(false);
+                      setIsKycModalOpen(true);
+                    }}
+                    className="group cursor-pointer p-5 rounded-2xl border-2 border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 hover:shadow-lg transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                        Passive Income
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1 mb-1">
+                        Tenant Sub
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
+                        R299.99 / mo to earn passive monthly income from user subscriptions.
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                      Select Tenant Sub →
                     </span>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1 mb-1">
-                      Tenant Sub
-                    </h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
-                      R299.99 / mo to earn passive monthly income.
-                    </p>
                   </div>
-                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                    Select Tenant Sub →
-                  </span>
-                </div>
 
-                {/* User Sub Option */}
-                <div
-                  onClick={() => {
-                    setActivePlanType('user');
-                    setShowSubModal(false);
-                    setIsKycModalOpen(true);
-                  }}
-                  className="group cursor-pointer p-5 rounded-2xl border-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 hover:shadow-lg transition-all flex flex-col justify-between"
-                >
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                      Active Account
+                  {/* User Sub Option */}
+                  <div
+                    onClick={() => {
+                      setActivePlanType('user');
+                      setShowSubModal(false);
+                      setIsKycModalOpen(true);
+                    }}
+                    className="group cursor-pointer p-5 rounded-2xl border-2 border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 hover:shadow-lg transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                        Active Account
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1 mb-1">
+                        User Sub
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
+                        R29.99 / mo to keep account active and access full features.
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      Select User Sub →
                     </span>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1 mb-1">
-                      User Sub
-                    </h3>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
-                      R29.99 / mo to keep account active.
-                    </p>
                   </div>
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                    Select User Sub →
-                  </span>
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-3 bg-slate-50/60 dark:bg-slate-900/60 shrink-0 flex justify-end">
                 <button
                   onClick={() => setShowSubModal(false)}
                   className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
@@ -412,10 +438,69 @@ export default function App() {
           isOpen={isKycModalOpen}
           onClose={() => setIsKycModalOpen(false)}
           planType={activePlanType}
-          onSuccess={(plan) => {
+          onSuccess={(plan, picUrl) => {
+            if (picUrl) {
+              setProfilePic(picUrl);
+              localStorage.setItem('timegig_profile_pic', picUrl);
+            }
+            setIsActivated(true);
+            setActivePlanType(plan);
+            localStorage.setItem('timegig_activated', 'true');
+            localStorage.setItem('timegig_plan_type', plan);
             console.log('Subscription activated successfully for:', plan);
           }}
         />
+
+        {/* Empty Content View for Activated Features */}
+        {activeView && (
+          <div className="absolute inset-0 z-[60] bg-slate-50 dark:bg-slate-950 flex flex-col h-full w-full animate-in fade-in duration-200">
+            {/* Header for Empty View */}
+            <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0 pt-[max(1rem,env(safe-area-inset-top,0px))]">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setActiveView(null)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                </button>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white capitalize">
+                  {activeView}
+                </h2>
+              </div>
+              <button
+                onClick={() => setActiveView(null)}
+                className="text-xs font-bold text-blue-600 hover:text-blue-700"
+              >
+                Close
+              </button>
+            </div>
+
+            {/* Empty Body */}
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-6">
+              <div className="w-24 h-24 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-300 dark:text-slate-700">
+                {activeView === 'tenant' && <Building2 className="w-12 h-12" />}
+                {activeView === 'referrals' && <Users className="w-12 h-12" />}
+                {activeView === 'gigs' && <Briefcase className="w-12 h-12" />}
+                {activeView === 'seekers' && <Search className="w-12 h-12" />}
+                {activeView === 'profile' && <User className="w-12 h-12" />}
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white capitalize">
+                  Your {activeView} is Empty
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
+                  There is currently no data or activity to display in this section. Explore the map to find opportunities.
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveView(null)}
+                className="px-8 py-3 bg-blue-600 text-white text-xs font-bold rounded-2xl shadow-lg shadow-blue-500/20 active:scale-95 transition-transform"
+              >
+                Return to Live Map
+              </button>
+            </div>
+          </div>
+        )}
 
         <MapView
           userLocation={userLocation}
@@ -432,25 +517,69 @@ export default function App() {
           onCancelNavigation={() => setNavigationRoute(null)}
         />
 
-        {/* Pinned Bottom Menu Bar with Centered Zap Activation Icon */}
-        <div className="absolute bottom-0 inset-x-0 z-20 flex items-center justify-center px-6 py-3.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shadow-2xl">
-          <button
-            onClick={handleToggleActivation}
-            className="flex flex-col items-center gap-1 group transition-transform active:scale-95"
-          >
-            <div
-              className={`p-2.5 rounded-2xl shadow-md transition-all ${
-                isActivated
-                  ? 'bg-amber-500 text-white shadow-amber-500/30'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-              }`}
+        {/* Pinned Bottom Menu Bar - Conditional Content Based on Activation */}
+        <div className="absolute bottom-0 inset-x-0 z-20 flex items-center justify-center px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shadow-2xl">
+          {!isActivated ? (
+            <button
+              onClick={handleToggleActivation}
+              className="flex flex-col items-center gap-1 group transition-transform active:scale-95"
             >
-              <Zap className="w-5 h-5" />
+              <div className="p-2.5 rounded-2xl shadow-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-amber-500 group-hover:text-white transition-all">
+                <Zap className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                Sensor Paused (Activate)
+              </span>
+            </button>
+          ) : (
+            <div className="flex items-center justify-between w-full max-w-md px-2 sm:px-4">
+              <button
+                onClick={() => setActiveView('tenant')}
+                className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'tenant' ? 'text-blue-600 scale-110' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                <Building2 className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase tracking-tight">Tenant</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('referrals')}
+                className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'referrals' ? 'text-blue-600 scale-110' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                <Users className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase tracking-tight">Referrals</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('gigs')}
+                className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'gigs' ? 'text-blue-600 scale-110' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                <Briefcase className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase tracking-tight">GiGs</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('seekers')}
+                className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'seekers' ? 'text-blue-600 scale-110' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                <Search className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase tracking-tight">Seekers</span>
+              </button>
+
+              <button
+                onClick={() => setActiveView('profile')}
+                className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'profile' ? 'text-blue-600 scale-110' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              >
+                {profilePic ? (
+                  <div className={`w-6 h-6 rounded-full overflow-hidden border ${activeView === 'profile' ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                    <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <User className="w-5 h-5" />
+                )}
+                <span className="text-[9px] font-bold uppercase tracking-tight">Profile</span>
+              </button>
             </div>
-            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              {isActivated ? 'Sensor Active' : 'Sensor Paused'}
-            </span>
-          </button>
+          )}
         </div>
       </div>
     </div>

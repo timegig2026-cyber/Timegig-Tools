@@ -1,6 +1,6 @@
 {
   "name": "OpenMap Geolocation Template",
   "description": "An interactive OpenStreetMap web template featuring live user geolocation tracking, reverse geocoding, custom waypoints, layer styles, and exportable spatial data with zero API costs.",
-  "requestFramePermissions": ["geolocation"],
+  "requestFramePermissions": ["geolocation", "camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

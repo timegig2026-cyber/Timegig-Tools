@@ -279,16 +279,22 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  const [isHudMinimized, setIsHudMinimized] = React.useState(false);
+  const [isHudMinimized, setIsHudMinimized] = React.useState(() => {
+    return localStorage.getItem('timegig_hud_minimized') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('timegig_hud_minimized', String(isHudMinimized));
+  }, [isHudMinimized]);
 
   return (
-    <div className="relative w-full h-full min-h-[450px] overflow-hidden bg-slate-100 dark:bg-slate-950">
+    <div className="relative w-full h-full overflow-hidden bg-slate-100 dark:bg-slate-950">
       {/* Leaflet Mount Container */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
       {/* Active Navigation HUD Card */}
       {navigationRoute && (
-        <div className="absolute top-24 left-4 z-30 w-80 sm:w-96 bg-slate-900/95 text-white backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700/80 p-4 animate-in fade-in slide-in-from-top-3">
+        <div className="absolute top-[max(4.75rem,calc(env(safe-area-inset-top,0px)+4.25rem))] left-3 sm:left-4 right-3 sm:right-auto sm:w-96 max-w-sm bg-slate-900/95 text-white backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700/80 p-4 z-30 animate-in fade-in slide-in-from-top-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400">
               Live Road Navigation
@@ -331,7 +337,7 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
 
       {/* Bubble Control Cluster: Zoom (+/-), Satellite Toggle, Location, Arrow attached together */}
-      <div className="absolute bottom-28 right-6 z-20 flex flex-col gap-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-2 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-800">
+      <div className="absolute bottom-[max(5.25rem,calc(env(safe-area-inset-bottom,0px)+4.75rem))] right-3 sm:right-6 z-20 flex flex-col gap-1.5 sm:gap-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl shadow-2xl border border-slate-200/80 dark:border-slate-800">
         {/* Zoom In Bubble */}
         <button
           onClick={handleZoomIn}
@@ -363,7 +369,7 @@ export const MapView: React.FC<MapViewProps> = ({
           <Layers className="w-5 h-5" />
         </button>
 
-        <div className="h-px bg-slate-200 dark:bg-slate-800 my-1" />
+        <div className="h-px bg-slate-200 dark:bg-slate-800 my-0.5" />
 
         {/* Location Bubble */}
         <button

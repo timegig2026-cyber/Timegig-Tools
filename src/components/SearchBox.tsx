@@ -112,7 +112,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({ onSelectLocation }) => {
       </div>
 
       {isOpen && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-700">
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg z-50 overflow-y-auto max-h-[50dvh] divide-y divide-slate-100 dark:divide-slate-700">
           {results.map((item) => (
             <button
               key={item.place_id}
