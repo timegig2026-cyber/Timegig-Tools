@@ -48,14 +48,13 @@ export const AuthView: React.FC = () => {
       }
 
       if (!userDoc.exists()) {
-        const isMainAccount = user.email === MAIN_ACCOUNT_EMAIL;
         try {
           await setDoc(doc(db, 'users', user.uid), {
             userId: user.uid,
             email: user.email,
-            planType: isMainAccount ? 'tenant' : 'user',
-            isActivated: isMainAccount,
-            invitedBy: isMainAccount ? null : invitedBy,
+            planType: 'user',
+            isActivated: false,
+            invitedBy: invitedBy,
             createdAt: new Date().toISOString()
           });
           await setDoc(doc(db, 'settings', user.uid), {

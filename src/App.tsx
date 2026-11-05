@@ -18,7 +18,7 @@ import {
 } from './types/map';
 import { TILE_PROVIDERS } from './utils/geo';
 import { 
-  Zap, Building2, Users, Briefcase, Search, User, ChevronLeft, Settings, LogOut, Volume2, VolumeX,
+  Zap, Building2, Users, Map as MapIcon, Search, User, ChevronLeft, Settings, LogOut, Volume2, VolumeX,
   TrendingUp, Wallet, Copy, Share2, DollarSign, Loader2, CheckCircle2, MapPin
 } from 'lucide-react';
 
