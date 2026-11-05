@@ -34,7 +34,7 @@ service cloud.firestore {
 
     // 3. Entity Validations
     function isValidUser(data) {
-      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups'];
+      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'activatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups'];
       return data.keys().hasAll(['userId', 'email']) &&
              data.keys().hasOnly(allowedKeys) &&
              data.userId is string && data.userId.size() <= 128 &&
@@ -94,7 +94,7 @@ service cloud.firestore {
       allow update: if (isOwner(userId) || isAdmin() || (isSignedIn() && existing().invitedBy == request.auth.uid)) && isValidUser(incoming()) && (
         // Action: Profile Update (Owner only, restricted fields, cannot change isAdmin)
         (isOwner(userId) && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'profilePicUrl', 'lastProfilePicUpdate', 'planType', 'isActivated', 'updatedAt']) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'profilePicUrl', 'lastProfilePicUpdate', 'planType', 'isActivated', 'activatedAt', 'updatedAt']) && 
          (!incoming().keys().hasAny(['isAdmin']) || incoming().isAdmin == existing().isAdmin)) ||
         // Action: Tenant approve/reject referral
         (isSignedIn() && existing().invitedBy == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['referralStatus', 'updatedAt'])) ||

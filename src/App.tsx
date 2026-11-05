@@ -115,6 +115,10 @@ export default function App() {
 
   const handleIconClick = (view: string) => {
     playClickSound();
+    if (!isActivated && currentUser?.email !== 'timegig2026@gmail.com') {
+      setShowSubModal(true);
+      return;
+    }
     if (view === 'gigs') {
       navigateToView(null);
     } else if (activeView === view) {
@@ -407,8 +411,25 @@ export default function App() {
   return (
     <div className="fixed inset-0 h-[100dvh] w-full max-w-full overflow-hidden bg-slate-950 font-sans flex flex-col">
       <div className="relative flex-1 h-full w-full overflow-hidden">
-        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-20 w-[92%] sm:w-[480px] md:w-[540px] max-w-xl">
-          <SearchBox onSelectLocation={(lat, lon, name) => { setHighlightLocation({ lat, lon, name }); setPendingDestination({ lat, lon, name }); }} />
+        <div 
+          className="absolute top-[max(0.75rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-20 w-[92%] sm:w-[480px] md:w-[540px] max-w-xl"
+          onClickCapture={(e) => {
+            if (!isActivated && currentUser?.email !== 'timegig2026@gmail.com') {
+              e.stopPropagation();
+              playClickSound();
+              setShowSubModal(true);
+            }
+          }}
+        >
+          <SearchBox onSelectLocation={(lat, lon, name) => { 
+            if (!isActivated && currentUser?.email !== 'timegig2026@gmail.com') {
+              playClickSound();
+              setShowSubModal(true);
+              return;
+            }
+            setHighlightLocation({ lat, lon, name }); 
+            setPendingDestination({ lat, lon, name }); 
+          }} />
         </div>
 
         {pendingDestination && (
@@ -483,8 +504,11 @@ export default function App() {
                   isActivated: true, 
                   planType: plan, 
                   profilePicUrl: picUrl || null,
+                  activatedAt: serverTimestamp(),
                   updatedAt: serverTimestamp()
                 });
+                setIsActivated(true);
+                setShowSubModal(false);
               } catch (e) {
                 handleFirestoreError(e, OperationType.UPDATE, `users/${currentUser.uid}`);
               }

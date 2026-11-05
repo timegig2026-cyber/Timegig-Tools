@@ -54,6 +54,7 @@ export const AuthView: React.FC = () => {
             email: user.email,
             planType: 'user',
             isActivated: false,
+            referralStatus: 'pending',
             invitedBy: invitedBy,
             createdAt: new Date().toISOString()
           });
@@ -99,6 +100,7 @@ export const AuthView: React.FC = () => {
             email: user.email,
             planType: 'user',
             isActivated: false,
+            referralStatus: 'pending',
             invitedBy: invitedBy,
             createdAt: new Date().toISOString(),
             tenantCapacity: invitedBy ? 10 : 0,
