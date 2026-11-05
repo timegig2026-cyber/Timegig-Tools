@@ -22,6 +22,11 @@ import {
   TrendingUp, Wallet, Copy, Share2, DollarSign, Loader2, CheckCircle2, MapPin
 } from 'lucide-react';
 
+import { TenantView } from './components/TenantView';
+import { ReferralsView } from './components/ReferralsView';
+import { SeekersView } from './components/SeekersView';
+import { ProfileView } from './components/ProfileView';
+
 const MapView = lazy(() => import('./components/MapView').then(m => ({ default: m.MapView })));
 const AuthView = lazy(() => import('./components/Auth').then(m => ({ default: m.AuthView })));
 const SubscriptionModal = lazy(() => import('./components/SubscriptionModal').then(m => ({ default: m.SubscriptionModal })));
@@ -43,7 +48,10 @@ export default function App() {
   const [isHudMinimized, setIsHudMinimized] = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
   const [isKycModalOpen, setIsKycModalOpen] = useState(false);
-  const [activeView, setActiveView] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<string | null>(() => {
+    const hash = window.location.hash.replace('#', '');
+    return hash ? hash : null;
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [userLocation, setUserLocation] = useState<LocationCoords | null>(null);
   const [geoStatus, setGeoStatus] = useState<GeolocationStatus>('idle');
@@ -61,6 +69,7 @@ export default function App() {
 
   // New features state
   const [referrals, setReferrals] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [seekers, setSeekers] = useState<any[]>([]);
   const [activeGig, setActiveGig] = useState<any>(null);
   const [hiringSeekerId, setHiringSeekerId] = useState<string | null>(null);
@@ -82,10 +91,36 @@ export default function App() {
     try { clickAudioRef.current.currentTime = 0; clickAudioRef.current.play().catch(() => {}); } catch (e) {}
   };
 
+  // Hash Router Navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const view = window.location.hash.replace('#', '') || null;
+      setActiveView(view);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigateToView = (view: string | null) => {
+    setActiveView(view);
+    if (view) {
+      window.location.hash = view;
+    } else {
+      if (window.location.hash) {
+        window.history.pushState("", document.title, window.location.pathname + window.location.search);
+      }
+    }
+  };
+
   const handleIconClick = (view: string) => {
-    console.log('Icon clicked:', view);
     playClickSound();
-    setActiveView(prev => prev === view ? null : view);
+    if (view === 'gigs') {
+      navigateToView(null);
+    } else if (activeView === view) {
+      navigateToView(null);
+    } else {
+      navigateToView(view);
+    }
     setShowSettings(false);
   };
 
@@ -104,7 +139,7 @@ export default function App() {
         setProfilePic(d.profilePicUrl || null);
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`));
-  }, [currentUser?.uid]); // Only depend on UID
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -115,7 +150,7 @@ export default function App() {
         setIsHudMinimized(d.isHudMinimized ?? false);
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `settings/${currentUser.uid}`));
-  }, [currentUser?.uid]); // Only depend on UID
+  }, [currentUser?.uid]);
 
   // Sync Referrals and Calculate Profit
   useEffect(() => {
@@ -128,7 +163,7 @@ export default function App() {
       let tProfit = 0;
       let uProfit = 0;
       docs.forEach(u => {
-        if (u.isActivated) {
+        if (u.isActivated && u.referralStatus === 'approved') {
           if (u.planType === 'tenant') tProfit += 299.99;
           else uProfit += 29.99;
         }
@@ -137,16 +172,21 @@ export default function App() {
       setUserProfit(uProfit);
       setTotalProfit(tProfit + uProfit);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'users (referrals)'));
-  }, [currentUser?.uid]); // Only depend on UID
+  }, [currentUser?.uid]);
 
-  // Sync Seekers (All activated users except self)
+  // Sync Seekers (All activated users)
   useEffect(() => {
-    if (!currentUser || activeView !== 'seekers') return;
+    if (!currentUser) return;
     const q = query(collection(db, 'users'), where('isActivated', '==', true), limit(50));
-    return onSnapshot(q, (snap) => setSeekers(snap.docs.map(d => d.data()).filter(u => u.userId !== currentUser.uid)), (err) => handleFirestoreError(err, OperationType.LIST, 'users (seekers)'));
-  }, [currentUser, activeView]);
+    return onSnapshot(q, (snap) => setSeekers(snap.docs.map(d => d.data())), (err) => handleFirestoreError(err, OperationType.LIST, 'users (seekers)'));
+  }, [currentUser]);
+  
+  const filteredSeekers = seekers.filter(s => 
+    s.userId !== currentUser?.uid && 
+    (s.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
-    // Sync Active Gig
+  // Sync Active Gig
   useEffect(() => {
     if (!currentUser) return;
     
@@ -172,7 +212,7 @@ export default function App() {
         if (activeView !== 'seekers') setNavigationRoute(null);
       }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'gigs'));
-  }, [currentUser?.uid, activeView]); // Removed userLocation from deps
+  }, [currentUser?.uid, activeView]);
 
   // Update Navigation Metrics separately with debouncing and AbortController
   useEffect(() => {
@@ -202,7 +242,7 @@ export default function App() {
             console.error('Navigation recalc error:', e);
           }
         });
-    }, 1000); // 1s debounce
+    }, 1000);
 
     return () => {
       clearTimeout(timeoutId);
@@ -263,7 +303,7 @@ export default function App() {
     playClickSound();
     try {
       await updateDoc(doc(db, 'gigs', activeGig.id), { status: 'accepted', updatedAt: serverTimestamp() });
-      setActiveView(null); // Direct to map
+      navigateToView(null);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `gigs/${activeGig.id}`);
     }
@@ -278,7 +318,6 @@ export default function App() {
     }, (e) => { 
       setGeoStatus('unavailable'); 
       if (!userLocation) {
-        // South African Fallback: Cape Town
         setUserLocation({ latitude: -33.9249, longitude: 18.4241, accuracy: 5000, altitude: 0, altitudeAccuracy: 0, heading: 0, speed: 0, timestamp: Date.now() }); 
       }
     }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
@@ -385,144 +424,116 @@ export default function App() {
           />
         </Suspense>
 
+        {/* Persistent Router View Stack */}
         {activeView && (
-          <div className={`absolute inset-x-0 top-0 bottom-[max(4.5rem,calc(env(safe-area-inset-bottom,0px)+4rem))] z-10 bg-slate-50 dark:bg-slate-950 flex flex-col w-full animate-in fade-in duration-200 ${activeView === 'gigs' ? 'hidden' : ''}`}>
-            <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shrink-0 pt-[max(1rem,env(safe-area-inset-top,0px))]">
-              <div className="flex items-center gap-3">
-                <button onClick={() => { playClickSound(); if (showSettings) setShowSettings(false); else setActiveView(null); }} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
-                  <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                </button>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white capitalize">{showSettings ? 'Settings' : activeView}</h2>
-              </div>
-              {(activeView === 'referrals' || activeView === 'seekers') && !showSettings && (
-                <div className="flex-1 max-w-[280px] ml-4">
-                  <SearchBox onSelectLocation={(lat, lon, name) => { setHighlightLocation({ lat, lon, name }); setActiveView(null); }} placeholder="Search area..." className="scale-90 origin-right" />
-                </div>
-              )}
-              {!showSettings && activeView === 'profile' && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-slate-100 dark:border-slate-800 shadow-sm">
-                    {profilePic ? (
-                      <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full bg-slate-50 flex items-center justify-center">
-                        <User className="w-5 h-5 text-slate-300" />
-                      </div>
+          <div className={`absolute inset-x-0 top-0 z-30 bottom-[max(4.25rem,calc(env(safe-area-inset-bottom,0px)+3.75rem))] bg-slate-950/40 dark:bg-slate-950/65 backdrop-blur-xl backdrop-saturate-150 flex flex-col w-full animate-in fade-in duration-200 ${activeView === 'gigs' ? 'hidden' : ''}`}>
+            {/* Floating Top Header Bar */}
+            <div className="absolute top-[env(safe-area-inset-top,0px)] pt-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-xl">
+              {activeView === 'referrals' || activeView === 'seekers' ? (
+                <SearchBox 
+                  placeholder={`Search ${activeView}...`} 
+                  onSelectLocation={(_, __, name) => setSearchQuery(name)} 
+                  className="w-full shadow-xl"
+                />
+              ) : (
+                <div className="flex items-center gap-3 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl p-2 shadow-lg border border-slate-200">
+                  <div className="flex-1 px-3 py-1 flex items-center justify-between">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white capitalize">{showSettings ? 'Settings' : activeView}</h2>
+                    {activeView === 'profile' && !showSettings && (
+                      <button onClick={() => { playClickSound(); setShowSettings(true); }} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
+                        <Settings className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+                      </button>
+                    )}
+                    {showSettings && (
+                      <button onClick={() => { playClickSound(); setShowSettings(false); }} className="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                        Close
+                      </button>
                     )}
                   </div>
-                  <button onClick={() => { playClickSound(); setShowSettings(true); }} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl">
-                    <Settings className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-                  </button>
                 </div>
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto pb-24">
-              {showSettings ? (
-                <div className="p-6 space-y-6">
-                  <div className="bg-white dark:bg-slate-900 rounded-3xl border divide-y divide-slate-100">
-                    <div className="p-5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {isSoundEnabled ? <Volume2 className="w-5 h-5 text-blue-600" /> : <VolumeX className="w-5 h-5 text-slate-400" />}
-                        <div><p className="text-sm font-bold text-slate-900">App Sounds</p><p className="text-xs text-slate-500">Feedback on clicks</p></div>
-                      </div>
-                      <button onClick={async () => {
-                        const newVal = !isSoundEnabled;
-                        setIsSoundEnabled(newVal);
-                        try {
-                          await updateDoc(doc(db, 'settings', currentUser.uid), { isSoundEnabled: newVal, updatedAt: serverTimestamp() });
-                        } catch (e) {
-                          handleFirestoreError(e, OperationType.UPDATE, `settings/${currentUser.uid}`);
-                        }
-                        if (newVal) playClickSound();
-                      }} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isSoundEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSoundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                      </button>
+            {/* Persistent Content Panels Container */}
+            <div className="flex-1 overflow-y-auto pb-6 pt-20">
+              {/* Settings Panel */}
+              <div className={showSettings ? 'block p-6 space-y-6' : 'hidden'}>
+                <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md rounded-3xl border border-white/20 dark:border-slate-800 shadow-2xl divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="p-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {isSoundEnabled ? <Volume2 className="w-5 h-5 text-blue-600" /> : <VolumeX className="w-5 h-5 text-slate-400" />}
+                      <div><p className="text-sm font-bold text-slate-900">App Sounds</p><p className="text-xs text-slate-500">Feedback on clicks</p></div>
                     </div>
-                    <button onClick={handleLogout} className="w-full p-5 flex items-center justify-between text-rose-600">
-                      <div className="flex items-center gap-3"><LogOut className="w-5 h-5" /><div><p className="text-sm font-bold">Log Out</p><p className="text-xs opacity-70">Exit account</p></div></div>
-                      <ChevronLeft className="w-4 h-4 rotate-180" />
+                    <button onClick={async () => {
+                      const newVal = !isSoundEnabled;
+                      setIsSoundEnabled(newVal);
+                      try {
+                        await updateDoc(doc(db, 'settings', currentUser.uid), { isSoundEnabled: newVal, updatedAt: serverTimestamp() });
+                      } catch (e) {
+                        handleFirestoreError(e, OperationType.UPDATE, `settings/${currentUser.uid}`);
+                      }
+                      if (newVal) playClickSound();
+                    }} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isSoundEnabled ? 'bg-blue-600' : 'bg-slate-200'}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isSoundEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
+                  </div>
+                  <button onClick={handleLogout} className="w-full p-5 flex items-center justify-between text-rose-600 hover:bg-rose-50/50 transition-colors rounded-b-3xl">
+                    <div className="flex items-center gap-3"><LogOut className="w-5 h-5" /><div><p className="text-sm font-bold">Log Out</p><p className="text-xs opacity-70">Exit account</p></div></div>
+                  </button>
+                </div>
+              </div>
 
-                  </div>
+              {/* Persistent Tenant View */}
+              {!showSettings && (
+                <div className={activeView === 'tenant' ? 'block' : 'hidden'}>
+                  <TenantView 
+                    totalProfit={totalProfit}
+                    tenantProfit={tenantProfit}
+                    userProfit={userProfit}
+                    currentUser={currentUser}
+                    referrals={referrals}
+                    playClickSound={playClickSound}
+                    onNavigateToReferrals={() => navigateToView('referrals')}
+                  />
                 </div>
-              ) : activeView === 'tenant' ? (
-                <div className="p-6 space-y-6">
-                  <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-3xl p-6 text-white shadow-xl">
-                    <div className="flex items-center justify-between mb-4"><Wallet className="w-6 h-6" /><span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full">Profit</span></div>
-                    <h3 className="text-3xl font-black">R{totalProfit.toFixed(2)}</h3>
+              )}
 
-                    <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-4">
-                      <div><p className="text-[10px] opacity-70 uppercase">Tenant Subs</p><p className="font-bold">R{tenantProfit.toFixed(2)}</p></div>
-                      <div><p className="text-[10px] opacity-70 uppercase">User Subs</p><p className="font-bold">R{userProfit.toFixed(2)}</p></div>
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-slate-900 rounded-3xl border p-6 space-y-4">
-                    <div className="flex items-center gap-3"><div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600"><Share2 className="w-6 h-6" /></div><div><h3 className="text-base font-bold">Referral Link</h3><p className="text-xs text-slate-500">Invite others and earn</p></div></div>
-                    <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-2">
-                      <div className="flex-1 text-xs font-mono truncate text-slate-600">https://timegig.app?ref={currentUser.uid}</div>
-                      <button onClick={() => { playClickSound(); navigator.clipboard.writeText(`https://timegig.app?ref=${currentUser.uid}`); }} className="p-2 bg-blue-600 text-white rounded-lg"><Copy className="w-4 h-4" /></button>
-                    </div>
-                  </div>
+              {/* Persistent Referrals View */}
+              {!showSettings && (
+                <div className={activeView === 'referrals' ? 'block' : 'hidden'}>
+                  <ReferralsView 
+                    referrals={referrals}
+                    searchQuery={searchQuery}
+                    currentUser={currentUser}
+                    activePlanType={activePlanType}
+                    playClickSound={playClickSound}
+                  />
                 </div>
-              ) : activeView === 'referrals' ? (
-                <div className="p-6 space-y-4">
-                  <h3 className="font-bold text-slate-900 px-1">Your Referrals</h3>
-                  {referrals.length === 0 ? (
-                    <div className="text-center py-20 text-slate-400 space-y-2"><Users className="w-12 h-12 mx-auto opacity-20" /><p className="text-sm">No referrals yet.</p></div>
-                  ) : (
-                    <div className="space-y-3">
-                      {referrals.map((r, i) => (
-                        <div key={i} className="bg-white p-4 rounded-2xl border flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden">{r.profilePicUrl ? <img src={r.profilePicUrl} className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-slate-400" />}</div>
-                          <div className="flex-1"><p className="text-sm font-bold text-slate-900">{r.email}</p><p className="text-[10px] text-emerald-600 font-bold uppercase">{r.planType} Sub</p></div>
-                          <div className="text-[10px] text-slate-400 font-medium">Joined {new Date(r.createdAt).toLocaleDateString()}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              )}
+
+              {/* Persistent Seekers View */}
+              {!showSettings && (
+                <div className={activeView === 'seekers' ? 'block' : 'hidden'}>
+                  <SeekersView 
+                    filteredSeekers={filteredSeekers}
+                    activeGig={activeGig}
+                    hiringSeekerId={hiringSeekerId}
+                    hireSeeker={hireSeeker}
+                    completeGig={completeGig}
+                    acceptGig={acceptGig}
+                    setShowCancelDialog={setShowCancelDialog}
+                  />
                 </div>
-              ) : activeView === 'seekers' ? (
-                <div className="p-6 space-y-4">
-                  {activeGig ? (
-                    <div className="bg-blue-600 rounded-3xl p-6 text-white space-y-6">
-                      <div className="flex items-center gap-3"><div className="w-12 h-12 rounded-full border-2 border-white/30 flex items-center justify-center animate-pulse"><Loader2 className="w-6 h-6" /></div><div><h3 className="text-lg font-bold">Active Gig Request</h3><p className="text-xs opacity-80">Waiting for response...</p></div></div>
-                      <div className="bg-white/10 rounded-2xl p-4 space-y-2">
-                        <div className="flex justify-between text-xs font-bold uppercase opacity-70"><span>Status</span><span>{activeGig.status}</span></div>
-                        <div className="flex justify-between text-sm font-bold"><span>Point</span><span>{activeGig.destination.name}</span></div>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {activeGig.ownerId === currentUser.uid && activeGig.status === 'accepted' && (
-                          <button onClick={completeGig} className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg">Complete Gig</button>
-                        )}
-                        {activeGig.seekerId === currentUser.uid && activeGig.status === 'pending' && (
-                          <button onClick={acceptGig} className="w-full py-4 bg-white text-blue-600 rounded-2xl font-bold shadow-lg">Accept Hiring Request</button>
-                        )}
-                        <button onClick={() => setShowCancelDialog(true)} className="w-full py-4 bg-white/20 text-white rounded-2xl font-bold border border-white/30">Cancel Gig</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <h3 className="font-bold text-slate-900 px-1">Available Seekers</h3>
-                      <div className="space-y-3">
-                        {seekers.map((s, i) => (
-                          <div key={i} className="bg-white p-4 rounded-3xl border flex items-center gap-4 hover:shadow-lg transition-shadow">
-                            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center overflow-hidden border border-blue-100">{s.profilePicUrl ? <img src={s.profilePicUrl} className="w-full h-full object-cover" /> : <User className="w-6 h-6 text-blue-400" />}</div>
-                            <div className="flex-1"><p className="text-sm font-bold text-slate-900">{s.email.split('@')[0]}</p><div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-bold uppercase mt-0.5"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span>Hiring Ready</span></div></div>
-                            <button onClick={() => hireSeeker(s)} disabled={!!activeGig || hiringSeekerId === s.userId} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition-transform disabled:opacity-50 min-w-[80px] flex items-center justify-center">
-                              {hiringSeekerId === s.userId ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Hire'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center p-8 text-center space-y-6 h-full">
-                  <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 overflow-hidden border-2 border-slate-200">{profilePic ? <img src={profilePic} alt="Profile" className="w-full h-full object-cover" /> : <User className="w-12 h-12" />}</div>
-                  <h3 className="text-xl font-bold text-slate-900 capitalize">Your {activeView} is Empty</h3>
-                  <button onClick={() => { playClickSound(); setActiveView(null); }} className="px-8 py-3 bg-blue-600 text-white text-xs font-bold rounded-2xl shadow-lg active:scale-95 transition-transform">Return to Map</button>
+              )}
+
+              {/* Persistent Profile View */}
+              {!showSettings && (
+                <div className={activeView === 'profile' ? 'block' : 'hidden'}>
+                  <ProfileView 
+                    currentUser={currentUser}
+                    playClickSound={playClickSound}
+                    onOpenSettings={() => setShowSettings(true)}
+                  />
                 </div>
               )}
             </div>
@@ -573,21 +584,40 @@ export default function App() {
           />
         </Suspense>
 
-        <div className="absolute bottom-0 inset-x-0 z-[100] flex items-center justify-center px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shadow-[0_-8px_30px_rgb(0,0,0,0.12)]">
-          {!isActivated && currentUser?.email !== 'timegig2026@gmail.com' ? (
-            <button onClick={() => { playClickSound(); setShowSubModal(true); }} className="flex flex-col items-center gap-1 active:scale-95 transition-transform"><div className="p-2.5 rounded-2xl bg-slate-200 dark:bg-slate-800 text-slate-600 group-hover:bg-amber-500 transition-all"><Zap className="w-5 h-5" /></div><span className="text-[11px] font-bold text-slate-700">Activate</span></button>
-          ) : (
-            <div className="flex items-center justify-around w-full max-w-md px-2">
-              {(activePlanType === 'tenant' || currentUser?.email === 'timegig2026@gmail.com') && (
-                <><button onClick={() => handleIconClick('tenant')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'tenant' ? 'text-blue-600 scale-110' : 'text-black dark:text-white'}`}><Building2 className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">Tenant</span></button>
-                <button onClick={() => handleIconClick('referrals')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'referrals' ? 'text-blue-600 scale-110' : 'text-black dark:text-white'}`}><Users className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">Referrals</span></button></>
-              )}
-              <button onClick={() => handleIconClick('gigs')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'gigs' ? 'text-blue-600 scale-110' : 'text-black dark:text-white'}`}><MapIcon className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">GiGs</span></button>
-              <button onClick={() => handleIconClick('seekers')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'seekers' ? 'text-blue-600 scale-110' : 'text-black dark:text-white'}`}><Search className="w-5 h-5" /><span className="text-[9px] font-bold uppercase">Seekers</span></button>
-              <button onClick={() => handleIconClick('profile')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'profile' ? 'text-blue-600 scale-110' : 'text-black dark:text-white'}`}>{profilePic ? <div className={`w-6 h-6 rounded-full overflow-hidden border ${activeView === 'profile' ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-200'}`}><img src={profilePic} className="w-full h-full object-cover" /></div> : <User className="w-5 h-5" />}<span className="text-[9px] font-bold uppercase">Profile</span></button>
+        {!showSubModal && !isKycModalOpen && (
+          <div className="absolute bottom-0 inset-x-0 z-[100] flex items-center justify-center px-4 sm:px-6 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 shadow-[0_-8px_30px_rgb(0,0,0,0.12)]">
+            <div className="flex items-center justify-around w-full max-w-md px-1">
+              <button onClick={() => handleIconClick('tenant')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'tenant' ? 'text-blue-600 scale-110 font-extrabold' : 'text-black dark:text-white'}`}>
+                <Building2 className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase">Tenant</span>
+              </button>
+              <button onClick={() => handleIconClick('referrals')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'referrals' ? 'text-blue-600 scale-110 font-extrabold' : 'text-black dark:text-white'}`}>
+                <Users className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase">Referrals</span>
+              </button>
+              <button onClick={() => handleIconClick('gigs')} className="flex flex-col items-center justify-center flex-1 transition-all group relative">
+                <div className={`w-13 h-13 -mt-5 rounded-full flex items-center justify-center shadow-xl border-2 transition-all ${activeView === 'gigs' || activeView === null ? 'bg-blue-600 text-white border-blue-400 scale-110 shadow-blue-500/30' : 'bg-slate-900 dark:bg-slate-800 text-white border-slate-700 hover:bg-blue-600'}`}>
+                  <MapIcon className="w-6 h-6" />
+                </div>
+                <span className={`text-[9px] font-bold uppercase mt-0.5 ${activeView === 'gigs' || activeView === null ? 'text-blue-600 font-extrabold' : 'text-black dark:text-white'}`}>GiGs</span>
+              </button>
+              <button onClick={() => handleIconClick('seekers')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'seekers' ? 'text-blue-600 scale-110 font-extrabold' : 'text-black dark:text-white'}`}>
+                <Search className="w-5 h-5" />
+                <span className="text-[9px] font-bold uppercase">Seekers</span>
+              </button>
+              <button onClick={() => handleIconClick('profile')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'profile' ? 'text-blue-600 scale-110 font-extrabold' : 'text-black dark:text-white'}`}>
+                {profilePic ? (
+                  <div className={`w-6 h-6 rounded-full overflow-hidden border ${activeView === 'profile' ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-200'}`}>
+                    <img src={profilePic} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <User className="w-5 h-5" />
+                )}
+                <span className="text-[9px] font-bold uppercase">Profile</span>
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

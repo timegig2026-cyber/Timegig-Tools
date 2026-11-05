@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, CheckCircle2, Loader2, ShieldCheck, FileText, ArrowRight, ArrowLeft, AlertCircle, Maximize2 } from 'lucide-react';
+import { Camera, Upload, CheckCircle2, Loader2, ShieldCheck, FileText, ArrowRight, ArrowLeft, AlertCircle, Maximize2, X } from 'lucide-react';
 
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -315,7 +315,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({
                 }}
                 className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition-colors shrink-0"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 

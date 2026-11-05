@@ -29,7 +29,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  Map,
+  Map as MapIcon,
   Compass,
 } from 'lucide-react';
 

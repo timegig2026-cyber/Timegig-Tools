@@ -94,7 +94,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
-            if (e.target.value.length >= 3) setIsOpen(true);
+            onSelectLocation(0, 0, e.target.value); // Use onSelectLocation as an onChange callback hack
+            if (e.target.value.length >= 0) setIsOpen(true);
           }}
           onFocus={() => {
             if (results.length > 0) setIsOpen(true);

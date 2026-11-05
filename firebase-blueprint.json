@@ -7,6 +7,12 @@
       "properties": {
         "userId": { "type": "string" },
         "email": { "type": "string", "format": "email" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "phone": { "type": "string" },
+        "locationName": { "type": "string" },
+        "locationCoords": { "type": "object" },
+        "lastProfilePicUpdate": { "type": "number" },
         "planType": { "type": "string", "enum": ["tenant", "user"] },
         "isActivated": { "type": "boolean" },
         "profilePicUrl": { "type": "string" },

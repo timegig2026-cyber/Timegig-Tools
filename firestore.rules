@@ -34,16 +34,23 @@ service cloud.firestore {
 
     // 3. Entity Validations
     function isValidUser(data) {
-      let allowedKeys = ['userId', 'email', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'createdAt', 'updatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups'];
+      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups'];
       return data.keys().hasAll(['userId', 'email']) &&
              data.keys().hasOnly(allowedKeys) &&
              data.userId is string && data.userId.size() <= 128 &&
              data.email is string && data.email.size() <= 128 &&
+             (!data.keys().hasAny(['firstName']) || (data.firstName is string && data.firstName.size() <= 128)) &&
+             (!data.keys().hasAny(['lastName']) || (data.lastName is string && data.lastName.size() <= 128)) &&
+             (!data.keys().hasAny(['phone']) || (data.phone is string && data.phone.size() <= 64)) &&
+             (!data.keys().hasAny(['locationName']) || (data.locationName is string && data.locationName.size() <= 256)) &&
+             (!data.keys().hasAny(['locationCoords']) || data.locationCoords == null || (data.locationCoords is map && data.locationCoords.lat is number && data.locationCoords.lon is number)) &&
+             (!data.keys().hasAny(['lastProfilePicUpdate']) || data.lastProfilePicUpdate is number) &&
              (!data.keys().hasAny(['invitedBy']) || (data.invitedBy is string && data.invitedBy.size() <= 128)) &&
+             (!data.keys().hasAny(['referralStatus']) || data.referralStatus in ['pending', 'approved', 'rejected']) &&
              (!data.keys().hasAny(['planType']) || data.planType in ['tenant', 'user']) &&
              (!data.keys().hasAny(['isActivated']) || data.isActivated is bool) &&
              (!data.keys().hasAny(['isAdmin']) || data.isAdmin is bool) &&
-             (!data.keys().hasAny(['profilePicUrl']) || (data.profilePicUrl is string && data.profilePicUrl.size() <= 2048)) &&
+             (!data.keys().hasAny(['profilePicUrl']) || (data.profilePicUrl is string && data.profilePicUrl.size() <= 1048576)) &&
              (!data.keys().hasAny(['tenantCapacity']) || data.tenantCapacity is number) &&
              (!data.keys().hasAny(['userCapacity']) || data.userCapacity is number) &&
              (!data.keys().hasAny(['tenantSubSignups']) || data.tenantSubSignups is number) &&
@@ -83,11 +90,13 @@ service cloud.firestore {
                     incoming().userId == request.auth.uid && 
                     (!incoming().keys().hasAny(['isAdmin']) || isAdmin());
       
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) && (
+      allow update: if (isOwner(userId) || isAdmin() || (isSignedIn() && existing().invitedBy == request.auth.uid)) && isValidUser(incoming()) && (
         // Action: Profile Update (Owner only, restricted fields, cannot change isAdmin)
         (isOwner(userId) && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['profilePicUrl', 'planType', 'isActivated', 'updatedAt']) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'profilePicUrl', 'lastProfilePicUpdate', 'planType', 'isActivated', 'updatedAt']) && 
          (!incoming().keys().hasAny(['isAdmin']) || incoming().isAdmin == existing().isAdmin)) ||
+        // Action: Tenant approve/reject referral
+        (isSignedIn() && existing().invitedBy == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['referralStatus', 'updatedAt'])) ||
         // Action: Admin Full Access
         isAdmin()
       );

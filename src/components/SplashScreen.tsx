@@ -11,7 +11,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
     const timer = setTimeout(() => {
       setIsVisible(false);
       setTimeout(onFinish, 500); // Wait for fade out animation
-    }, 2500);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [onFinish]);
@@ -50,7 +50,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
           100% { transform: scaleX(1); }
         }
         .animate-progress {
-          animation: progress 2s ease-in-out forwards;
+          animation: progress 1s ease-in-out forwards;
         }
       `}</style>
     </div>
