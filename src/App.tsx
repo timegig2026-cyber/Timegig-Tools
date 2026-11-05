@@ -172,10 +172,10 @@ export default function App() {
     if (!currentUser) return;
 
     if (currentUser.email === 'timegig2026@gmail.com') {
-      // Admin timegig2026@gmail.com receives:
-      // 1. Direct referrals
-      // 2. Referrals who joined without any tenant referral link
-      // 3. Referrals invited by non-tenants (User Sub accounts)
+      // Admin tenant timegig2026@gmail.com receives:
+      // 1. User Sub and Tenant Sub referrals invited by timegig2026@gmail.com Tenant link
+      // 2. User Sub and Tenant Sub referrals invited by any User Sub link
+      // 3. Referrals who joined directly without a referral link
       const qAll = collection(db, 'users');
       return onSnapshot(qAll, (snap) => {
         const allUsers = snap.docs.map(d => d.data());
@@ -183,20 +183,32 @@ export default function App() {
         const userMap = new Map<string, any>();
         allUsers.forEach(u => userMap.set(u.userId, u));
 
-        const routedReferrals = allUsers.filter(u => {
-          if (u.userId === currentUser.uid) return false;
-          if (!u.invitedBy) return true; // Joined without link
-          if (u.invitedBy === currentUser.uid) return true; // Direct referral
-          const inviter = userMap.get(u.invitedBy);
-          if (!inviter || inviter.planType !== 'tenant') return true; // Invited by User Sub account
-          return false;
-        });
+        const routedReferrals = allUsers
+          .filter(u => {
+            if (u.userId === currentUser.uid) return false;
+            if (u.invitedBy === currentUser.uid) return true; // Direct referral from timegig2026@gmail.com
+            if (!u.invitedBy) return true; // Joined without link
+            const inviter = userMap.get(u.invitedBy);
+            if (!inviter || inviter.planType === 'user') return true; // Invited by User Sub account
+            return false;
+          })
+          .map((u: any) => {
+            const inviter = u.invitedBy ? userMap.get(u.invitedBy) : null;
+            return {
+              ...u,
+              inviterEmail: inviter?.email || null,
+              inviterPlanType: inviter?.planType || 'user',
+              isDirectTenantRef: u.invitedBy === currentUser.uid,
+              isUserSubRef: inviter?.planType === 'user',
+              isNoLinkRef: !u.invitedBy
+            };
+          });
 
         setReferrals(routedReferrals);
 
         let tProfit = 0;
         let uProfit = 0;
-        routedReferrals.forEach(u => {
+        routedReferrals.forEach((u: any) => {
           if (u.isActivated && u.referralStatus === 'approved') {
             if (u.planType === 'tenant') tProfit += 299.99;
             else uProfit += 29.99;

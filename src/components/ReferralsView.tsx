@@ -98,10 +98,23 @@ export const ReferralsView: React.FC<ReferralsViewProps> = ({
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
                       {r.email}
                     </p>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
                         {r.planType || 'user'} Sub
                       </span>
+                      {r.isDirectTenantRef ? (
+                        <span className="text-[10px] font-bold uppercase text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
+                          Tenant Link
+                        </span>
+                      ) : r.isUserSubRef ? (
+                        <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800" title={r.inviterEmail ? `Referred by User Sub (${r.inviterEmail})` : 'Referred by User Sub link'}>
+                          User Sub Link
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                          Direct App
+                        </span>
+                      )}
                       {r.createdAt && (
                         <span className="text-[10px] text-slate-400 font-medium">
                           Joined {new Date(r.createdAt).toLocaleDateString()}
