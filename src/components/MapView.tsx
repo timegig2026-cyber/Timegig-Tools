@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { LocationCoords, Waypoint, TileProvider } from '../types/map';
 import { calculateDistance, formatDistance, TILE_PROVIDERS } from '../utils/geo';
-import { Crosshair, Navigation, Plus, Minus, Layers } from 'lucide-react';
+import { Crosshair, Navigation, Plus, Minus, Layers, Info, X } from 'lucide-react';
 
 interface MapViewProps {
   userLocation: LocationCoords | null;
@@ -27,6 +27,7 @@ interface MapViewProps {
   isHudMinimized: boolean;
   onToggleHud: () => void;
   onCancelNavigation: () => void;
+  playClickSound?: () => void;
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -45,7 +46,9 @@ export const MapView: React.FC<MapViewProps> = ({
   isHudMinimized,
   onToggleHud,
   onCancelNavigation,
+  playClickSound,
 }) => {
+  const [showInfoPopup, setShowInfoPopup] = React.useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -354,6 +357,31 @@ export const MapView: React.FC<MapViewProps> = ({
         >
           <Plus className="w-5 h-5" />
         </button>
+
+        {/* Info Icon Bubble */}
+        <div className="relative">
+          <button
+            onClick={() => { if (playClickSound) playClickSound(); setShowInfoPopup(!showInfoPopup); }}
+            title="Feature Information"
+            className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center shadow-xs transition-all cursor-pointer"
+          >
+            <Info className="w-3 h-3" />
+          </button>
+          {showInfoPopup && (
+            <>
+              <div className="fixed inset-0 z-[140]" onClick={() => setShowInfoPopup(false)} />
+              <div className="absolute right-full mr-3 top-0 w-64 max-w-[70vw] p-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl text-xs text-white/90 leading-relaxed z-[150] animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-bold text-blue-400 uppercase tracking-wider text-[10px]">GiGs Map</p>
+                  <button onClick={() => setShowInfoPopup(false)} className="text-white/40 hover:text-white transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                Explore available gigs and service providers in your area. Use the map to navigate, track your location, and find nearby opportunities.
+              </div>
+            </>
+          )}
+        </div>
 
         {/* Zoom Out Bubble */}
         <button

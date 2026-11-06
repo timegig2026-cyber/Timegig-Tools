@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Share2, Copy, Bell, Users, CheckCircle2, ChevronRight, X, Trash2, CheckSquare, Square, ShieldAlert } from 'lucide-react';
+import { Wallet, Share2, Copy, Bell, Users, CheckCircle2, ChevronRight, X, Trash2, CheckSquare, Square, Info, ArrowLeft } from 'lucide-react';
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { OperationType, handleFirestoreError } from '../utils/firestoreDiagnostics';
@@ -24,6 +24,7 @@ export const TenantView: React.FC<TenantViewProps> = ({
   onNavigateToReferrals
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -110,47 +111,72 @@ export const TenantView: React.FC<TenantViewProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-xl mx-auto">
+    <div className="p-3 sm:p-5 space-y-4 max-w-xl mx-auto w-full box-border overflow-x-hidden">
       {/* Top Banner Card with Notification Bell */}
-      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-        <div className="flex items-center justify-between mb-4 z-10 relative">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
-              <Wallet className="w-6 h-6 text-white" />
+      <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-5 text-white shadow-xl relative overflow-hidden box-border">
+        <div className="flex items-center justify-between mb-3 z-10 relative">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2.5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 shrink-0">
+              <Wallet className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-200">
+            <div className="min-w-0">
+              <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-200 block truncate">
                 Tenant Portal
               </span>
-              <h2 className="text-sm font-bold text-white">Passive Revenue</h2>
+              <h2 className="text-xs font-bold text-white truncate">Passive Revenue</h2>
             </div>
           </div>
 
-          {/* Top Corner Notification Icon */}
-          <button 
-            onClick={handleToggleNotifications}
-            className="p-3 bg-white/10 hover:bg-white/20 active:scale-95 transition-all rounded-2xl border border-white/20 relative shadow-md cursor-pointer"
-            title="Referral Alerts"
-          >
-            <Bell className="w-5 h-5 text-white" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5.5 h-5.5 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-blue-600 animate-pulse">
-                {unreadCount}
-              </span>
-            )}
-          </button>
+          {/* Top Corner Notification Icon & Info Icon */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button 
+                onClick={() => { playClickSound(); setShowInfoPopup(!showInfoPopup); }}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-xl border border-white/20 text-white/80 transition-all cursor-pointer"
+              >
+                <Info className="w-3 h-3" />
+              </button>
+              {showInfoPopup && (
+                <>
+                  <div className="fixed inset-0 z-[140]" onClick={() => setShowInfoPopup(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] p-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl text-xs text-white/90 leading-relaxed z-[150] animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-bold text-blue-400 uppercase tracking-wider text-[10px]">Tenant Portal</p>
+                      <button onClick={() => setShowInfoPopup(false)} className="text-white/40 hover:text-white transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    Manage your passive revenue streams, track referrals, and access your unique invite link to grow your network and earn commissions.
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button 
+              onClick={handleToggleNotifications}
+              className="p-2.5 bg-white/10 hover:bg-white/20 active:scale-95 transition-all rounded-2xl border border-white/20 relative shadow-md cursor-pointer shrink-0"
+              title="Referral Alerts"
+            >
+              <Bell className="w-4 h-4 text-white" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-blue-600 animate-pulse">
+                  {unreadCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
-        <h3 className="text-3xl font-black">R{totalProfit.toFixed(2)}</h3>
+        <h3 className="text-2xl font-black truncate px-0.5">R{totalProfit.toFixed(2)}</h3>
 
-        <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider">Tenant Subs</p>
-            <p className="font-bold text-lg">R{tenantProfit.toFixed(2)}</p>
+        <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-2 gap-3 box-border">
+          <div className="min-w-0">
+            <p className="text-[9px] opacity-70 uppercase font-bold tracking-wider truncate">Tenant Subs</p>
+            <p className="font-bold text-base truncate">R{tenantProfit.toFixed(2)}</p>
           </div>
-          <div>
-            <p className="text-[10px] opacity-70 uppercase font-bold tracking-wider">User Subs</p>
-            <p className="font-bold text-lg">R{userProfit.toFixed(2)}</p>
+          <div className="min-w-0">
+            <p className="text-[9px] opacity-70 uppercase font-bold tracking-wider truncate">User Subs</p>
+            <p className="font-bold text-base truncate">R{userProfit.toFixed(2)}</p>
           </div>
         </div>
       </div>
@@ -160,13 +186,13 @@ export const TenantView: React.FC<TenantViewProps> = ({
         <div className="fixed inset-0 z-[120] bg-slate-950/40 dark:bg-slate-950/65 backdrop-blur-xl backdrop-saturate-150 flex flex-col p-4 sm:p-6 overflow-hidden animate-in fade-in duration-200">
           {/* Top Bar */}
           <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
-            <div className="flex items-center gap-3 text-white">
-              <div className="p-2.5 bg-blue-600 rounded-2xl shadow-lg">
+            <div className="flex items-center gap-3 text-white min-w-0">
+              <div className="p-2.5 bg-blue-600 rounded-2xl shadow-lg shrink-0">
                 <Bell className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <h2 className="text-lg font-bold">Referral Notifications</h2>
-                <p className="text-xs text-slate-400">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold truncate">Referral Notifications</h2>
+                <p className="text-xs text-slate-400 truncate">
                   {activeAlerts.length} total alerts ({unreadCount} pending review)
                 </p>
               </div>
@@ -174,9 +200,10 @@ export const TenantView: React.FC<TenantViewProps> = ({
 
             <button 
               onClick={() => { playClickSound(); setShowNotifications(false); }}
-              className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-transform active:scale-95 shadow"
+              className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-transform active:scale-95 shadow shrink-0 flex items-center gap-2"
             >
-              <X className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-xs font-bold sm:hidden">Back</span>
             </button>
           </div>
 
@@ -249,7 +276,7 @@ export const TenantView: React.FC<TenantViewProps> = ({
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-bold truncate text-white">{ref.email}</p>
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${
                           status === 'approved' 
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                             : status === 'rejected'
@@ -260,7 +287,7 @@ export const TenantView: React.FC<TenantViewProps> = ({
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-300">
+                      <p className="text-xs text-slate-300 truncate">
                         Joined via tenant link ({ref.planType || 'User'} Subscription)
                       </p>
                     </div>
@@ -298,19 +325,19 @@ export const TenantView: React.FC<TenantViewProps> = ({
       )}
 
       {/* Share Link Card */}
-      <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md rounded-3xl border border-white/30 dark:border-slate-800 p-6 space-y-4 shadow-2xl">
+      <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md rounded-3xl border border-white/30 dark:border-slate-800 p-5 space-y-3 shadow-2xl box-border">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/40">
-            <Share2 className="w-6 h-6" />
+          <div className="p-2 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/40 shrink-0">
+            <Share2 className="w-5 h-5" />
           </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Tenant Referral Link</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Invite new users or tenants to earn commission</p>
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">Tenant Referral Link</h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Invite new users or tenants to earn commission</p>
           </div>
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-4 flex items-center gap-2 border border-slate-200 dark:border-slate-700">
-          <div className="flex-1 text-xs font-mono truncate text-slate-700 dark:text-slate-200">
+        <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-3 flex items-center gap-2 border border-slate-200 dark:border-slate-700 box-border">
+          <div className="flex-1 text-xs font-mono truncate text-slate-700 dark:text-slate-200 min-w-0">
             https://timegig.app?ref={currentUser.uid}
           </div>
           <button 
@@ -318,7 +345,7 @@ export const TenantView: React.FC<TenantViewProps> = ({
               playClickSound(); 
               navigator.clipboard.writeText(`https://timegig.app?ref=${currentUser.uid}`); 
             }} 
-            className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow transition-transform active:scale-95"
+            className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow transition-transform active:scale-95 shrink-0"
             title="Copy Link"
           >
             <Copy className="w-4 h-4" />

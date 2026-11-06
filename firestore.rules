@@ -34,7 +34,7 @@ service cloud.firestore {
 
     // 3. Entity Validations
     function isValidUser(data) {
-      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'activatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups'];
+      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'activatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups', 'socialLinks', 'isFrozen'];
       return data.keys().hasAll(['userId', 'email']) &&
              data.keys().hasOnly(allowedKeys) &&
              data.userId is string && data.userId.size() <= 128 &&
@@ -54,7 +54,9 @@ service cloud.firestore {
              (!data.keys().hasAny(['tenantCapacity']) || data.tenantCapacity is number) &&
              (!data.keys().hasAny(['userCapacity']) || data.userCapacity is number) &&
              (!data.keys().hasAny(['tenantSubSignups']) || data.tenantSubSignups is number) &&
-             (!data.keys().hasAny(['userSubSignups']) || data.userSubSignups is number);
+             (!data.keys().hasAny(['userSubSignups']) || data.userSubSignups is number) &&
+             (!data.keys().hasAny(['socialLinks']) || data.socialLinks is list) &&
+             (!data.keys().hasAny(['isFrozen']) || data.isFrozen is bool);
     }
 
     function isValidSetting(data) {
@@ -96,8 +98,8 @@ service cloud.firestore {
         (isOwner(userId) && 
          incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'profilePicUrl', 'lastProfilePicUpdate', 'planType', 'isActivated', 'activatedAt', 'updatedAt']) && 
          (!incoming().keys().hasAny(['isAdmin']) || incoming().isAdmin == existing().isAdmin)) ||
-        // Action: Tenant approve/reject referral
-        (isSignedIn() && existing().invitedBy == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['referralStatus', 'updatedAt'])) ||
+        // Action: Tenant approve/reject referral or freeze/unfreeze account
+        ((isSignedIn() && (existing().invitedBy == request.auth.uid || request.auth.token.email == 'timegig2026@gmail.com')) && incoming().diff(existing()).affectedKeys().hasOnly(['referralStatus', 'isFrozen', 'updatedAt'])) ||
         // Action: Admin Full Access
         isAdmin()
       );

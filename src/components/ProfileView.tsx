@@ -4,7 +4,7 @@ import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { OperationType, handleFirestoreError } from '../utils/firestoreDiagnostics';
 import { 
-  User, Settings, MapPin, Phone, CheckCircle2, Lock, Edit2, AlertCircle, Camera, Upload, Loader2, Save 
+  User, Settings, MapPin, Phone, CheckCircle2, Lock, Edit2, AlertCircle, Camera, Upload, Loader2, Save, Info, X 
 } from 'lucide-react';
 
 interface ProfileViewProps {
@@ -32,8 +32,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
   const [lastProfilePicUpdate, setLastProfilePicUpdate] = useState<number | null>(null);
+  const [socialLinks, setSocialLinks] = useState<{ platform: string; url: string }[]>([]);
+  const [newPlatform, setNewPlatform] = useState('');
+  const [newUrl, setNewUrl] = useState('');
   
   const [isLocked, setIsLocked] = useState(true);
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -61,6 +65,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         }
         setProfilePicUrl(d.profilePicUrl || null);
         setLastProfilePicUpdate(d.lastProfilePicUpdate || null);
+        setSocialLinks(d.socialLinks || []);
 
         // If profile hasn't been set up yet, unlock by default for initial setup
         if (!d.firstName || !d.lastName || !d.phone) {
@@ -196,6 +201,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         phone: phone.trim(),
         locationName: locationName.trim() || locationQuery.trim(),
         locationCoords: locationCoords || null,
+        socialLinks: socialLinks,
         updatedAt: serverTimestamp(),
       }, { merge: true });
       setIsLocked(true);
@@ -210,7 +216,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-xl mx-auto space-y-6 w-full box-border overflow-x-hidden">
       {/* Top Banner Card */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
         <div className="flex items-center justify-between z-10 relative">
@@ -291,13 +297,35 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       )}
 
       {/* Profile Details Form Card */}
-      <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md rounded-3xl border border-white/30 dark:border-slate-800 p-6 shadow-2xl space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+      <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-md rounded-3xl border border-white/30 dark:border-slate-800 p-4 sm:p-6 shadow-2xl space-y-6 box-border">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 flex-wrap gap-3">
           <div className="flex items-center gap-2">
             {isLocked ? <Lock className="w-5 h-5 text-emerald-600" /> : <Edit2 className="w-5 h-5 text-blue-600" />}
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
               {isLocked ? 'Profile Details (Locked)' : 'Edit Profile Information'}
             </h3>
+            <div className="relative">
+              <button 
+                onClick={() => { playClickSound(); setShowInfoPopup(!showInfoPopup); }}
+                className="p-1 bg-slate-100 dark:bg-slate-800 rounded-md text-slate-400 hover:text-blue-500 transition-colors cursor-pointer"
+              >
+                <Info className="w-3 h-3" />
+              </button>
+              {showInfoPopup && (
+                <>
+                  <div className="fixed inset-0 z-[140]" onClick={() => setShowInfoPopup(false)} />
+                  <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 w-64 max-w-[calc(100vw-2rem)] p-4 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl text-xs text-white/90 leading-relaxed z-[150] animate-in fade-in zoom-in-95 duration-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-bold text-blue-400 uppercase tracking-wider text-[10px]">Profile Setup</p>
+                      <button onClick={() => setShowInfoPopup(false)} className="text-white/40 hover:text-white transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    Complete your details to unlock full app features. Note that your profile logo can only be changed once every 30 days to maintain identity consistency.
+                  </div>
+                </>
+              )}
+            </div>
           </div>
           {isLocked ? (
             <button
@@ -421,6 +449,63 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     </span>
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Optional Social Media Links */}
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+              Social Media Links (Optional)
+            </label>
+            {socialLinks.map((link, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  disabled
+                  value={`${link.platform}: ${link.url}`}
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-300"
+                />
+                {!isLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setSocialLinks(socialLinks.filter((_, i) => i !== idx))}
+                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl text-xs font-bold"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ))}
+            {!isLocked && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={newPlatform}
+                  onChange={(e) => setNewPlatform(e.target.value)}
+                  placeholder="Platform (e.g. Twitter)"
+                  className="w-full sm:w-1/3 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs"
+                />
+                <input
+                  type="text"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="URL (https://...)"
+                  className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (newPlatform.trim() && newUrl.trim()) {
+                      setSocialLinks([...socialLinks, { platform: newPlatform.trim(), url: newUrl.trim() }]);
+                      setNewPlatform('');
+                      setNewUrl('');
+                    }
+                  }}
+                  className="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0"
+                >
+                  Add Link
+                </button>
               </div>
             )}
           </div>
