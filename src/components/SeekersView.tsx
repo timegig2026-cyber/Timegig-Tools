@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Loader2, Info, X } from 'lucide-react';
+import { User, Loader2, Info, X, MessageSquare, CheckCircle2, XCircle } from 'lucide-react';
 
 interface SeekersViewProps {
   filteredSeekers: any[];
@@ -8,11 +8,14 @@ interface SeekersViewProps {
   hireSeeker: (seeker: any) => void;
   completeGig: () => void;
   acceptGig: () => void;
+  declineGig: () => void;
   setShowCancelDialog: (show: boolean) => void;
+  onStartChat: (seeker: any) => void;
+  currentUserId?: string;
 }
 
 export const SeekersView: React.FC<SeekersViewProps> = ({ 
-  filteredSeekers, activeGig, hiringSeekerId, hireSeeker, completeGig, acceptGig, setShowCancelDialog 
+  filteredSeekers, activeGig, hiringSeekerId, hireSeeker, completeGig, acceptGig, declineGig, setShowCancelDialog, onStartChat, currentUserId 
 }) => {
   const [showInfoPopup, setShowInfoPopup] = React.useState(false);
   
@@ -65,13 +68,31 @@ export const SeekersView: React.FC<SeekersViewProps> = ({
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {activeGig.status === 'accepted' && (
+            {activeGig.status === 'accepted' && activeGig.ownerId === currentUserId && (
               <button onClick={completeGig} className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg">Complete Gig</button>
             )}
-            {activeGig.status === 'pending' && (
-              <button onClick={acceptGig} className="w-full py-4 bg-white text-blue-600 rounded-2xl font-bold shadow-lg">Accept Hiring Request</button>
+            {activeGig.status === 'accepted' && activeGig.seekerId === currentUserId && (
+              <div className="p-4 bg-white/10 rounded-2xl text-center">
+                <p className="text-xs font-bold uppercase text-blue-200 mb-2">Gig Accepted</p>
+                <p className="text-sm">Please follow the map navigation to the destination.</p>
+              </div>
             )}
-            <button onClick={() => setShowCancelDialog(true)} className="w-full py-4 bg-white/20 text-white rounded-2xl font-bold border border-white/30">Cancel Gig</button>
+            {activeGig.status === 'pending' && activeGig.seekerId === currentUserId && (
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={acceptGig} className="py-4 bg-emerald-500 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" /> Accept
+                </button>
+                <button onClick={declineGig} className="py-4 bg-rose-500 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2">
+                  <XCircle className="w-5 h-5" /> Decline
+                </button>
+              </div>
+            )}
+            {activeGig.status === 'pending' && activeGig.ownerId === currentUserId && (
+              <button onClick={() => setShowCancelDialog(true)} className="w-full py-4 bg-white/20 text-white rounded-2xl font-bold border border-white/30">Cancel Request</button>
+            )}
+            {activeGig.status === 'accepted' && (
+              <button onClick={() => setShowCancelDialog(true)} className="w-full py-3 bg-white/10 text-white/60 rounded-xl font-bold border border-white/10 text-xs">Cancel Gig</button>
+            )}
           </div>
         </div>
       ) : (
@@ -97,9 +118,18 @@ export const SeekersView: React.FC<SeekersViewProps> = ({
                     <span>Hiring Ready</span>
                   </div>
                 </div>
-                <button onClick={() => hireSeeker(s)} disabled={!!activeGig || hiringSeekerId === s.userId} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition-transform disabled:opacity-50 min-w-[80px] flex items-center justify-center shrink-0">
-                  {hiringSeekerId === s.userId ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Hire'}
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button 
+                    onClick={() => onStartChat(s)}
+                    className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 transition-all active:scale-95"
+                    title="Message Seeker"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => hireSeeker(s)} disabled={!!activeGig || hiringSeekerId === s.userId} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl shadow-md active:scale-95 transition-transform disabled:opacity-50 min-w-[80px] flex items-center justify-center">
+                    {hiringSeekerId === s.userId ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Hire'}
+                  </button>
+                </div>
               </div>
             ))
           )}

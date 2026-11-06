@@ -28,6 +28,8 @@ interface MapViewProps {
   onToggleHud: () => void;
   onCancelNavigation: () => void;
   playClickSound?: () => void;
+  userProfilePic?: string | null;
+  otherUsers?: any[];
 }
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -47,6 +49,8 @@ export const MapView: React.FC<MapViewProps> = ({
   onToggleHud,
   onCancelNavigation,
   playClickSound,
+  userProfilePic,
+  otherUsers = [],
 }) => {
   const [showInfoPopup, setShowInfoPopup] = React.useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +61,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const userMarkerRef = useRef<L.Marker | null>(null);
   const userAccuracyCircleRef = useRef<L.Circle | null>(null);
   const waypointsLayerRef = useRef<L.LayerGroup | null>(null);
+  const otherUsersLayerRef = useRef<L.LayerGroup | null>(null);
   const trackLineRef = useRef<L.Polyline | null>(null);
   const highlightMarkerRef = useRef<L.Marker | null>(null);
 
@@ -86,6 +91,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
     // Layer groups for markers
     waypointsLayerRef.current = L.layerGroup().addTo(map);
+    otherUsersLayerRef.current = L.layerGroup().addTo(map);
 
     // Track line
     trackLineRef.current = L.polyline([], {
@@ -140,11 +146,13 @@ export const MapView: React.FC<MapViewProps> = ({
       html: `
         <div class="relative flex items-center justify-center w-8 h-8">
           <div class="absolute w-8 h-8 rounded-full bg-blue-500/20 user-location-beacon"></div>
-          <div class="relative w-4 h-4 rounded-full bg-blue-600 border-2 border-white shadow-md flex items-center justify-center">
+          <div class="relative w-8 h-8 rounded-full border-2 border-white shadow-lg overflow-hidden flex items-center justify-center bg-blue-600">
             ${
-              hasHeading
+              userProfilePic 
+                ? `<img src="${userProfilePic}" class="w-full h-full object-cover" />`
+                : hasHeading
                 ? `<div style="transform: rotate(${headingDegree}deg); width: 0; height: 0; border-left: 3px solid transparent; border-right: 3px solid transparent; border-bottom: 6px solid white;"></div>`
-                : `<div class="w-1.5 h-1.5 rounded-full bg-white"></div>`
+                : `<div class="w-2 h-2 rounded-full bg-white"></div>`
             }
           </div>
         </div>
@@ -241,6 +249,44 @@ export const MapView: React.FC<MapViewProps> = ({
       marker.bindPopup(popupContent);
     });
   }, [waypoints, userLocation]);
+
+  // Update Other Users on Map
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const layer = otherUsersLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    otherUsers.forEach((u) => {
+      // Don't show current user again (they have a special persistent marker)
+      // and only show users with valid coordinates
+      if (!u.locationCoords || !u.locationCoords.lat || !u.locationCoords.lon) return;
+
+      const userIcon = L.divIcon({
+        className: 'other-user-marker',
+        html: `
+          <div class="relative flex flex-col items-center" style="transform: translate(-50%, -50%);">
+            <div class="w-10 h-10 rounded-full border-2 border-emerald-500 shadow-xl overflow-hidden bg-slate-900 flex items-center justify-center">
+              ${u.profilePicUrl ? `<img src="${u.profilePicUrl}" class="w-full h-full object-cover" />` : `<div class="w-full h-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs">${u.email.charAt(0).toUpperCase()}</div>`}
+            </div>
+            <div class="mt-1 px-1.5 py-0.5 bg-slate-900/80 backdrop-blur-md rounded-md border border-white/10 text-[8px] font-black text-white truncate max-w-[64px]">
+              ${u.email.split('@')[0]}
+            </div>
+          </div>
+        `,
+        iconSize: [0, 0],
+      });
+
+      const marker = L.marker([u.locationCoords.lat, u.locationCoords.lon], { icon: userIcon }).addTo(layer);
+      marker.bindPopup(`
+        <div class="p-2 text-xs font-bold text-slate-800">
+          <p class="text-blue-600">${u.email}</p>
+          <p class="text-[10px] text-slate-500 mt-0.5 font-normal">Active Provider</p>
+        </div>
+      `);
+    });
+  }, [otherUsers]);
 
   // Update Navigation Route Line & HUD
   const routeLineRef = useRef<L.Polyline | null>(null);

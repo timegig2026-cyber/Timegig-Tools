@@ -49,6 +49,29 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["gigId", "ownerId", "seekerId", "status"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "A direct message room between two users",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message within a chat room",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "senderId", "senderEmail"]
     }
   },
   "firestore": {
@@ -63,6 +86,14 @@
     "/gigs/{gigId}": {
       "schema": "Gig",
       "description": "Gig transaction records"
+    },
+    "/chatRooms/{roomId}": {
+      "schema": "ChatRoom",
+      "description": "Direct message rooms"
+    },
+    "/chatRooms/{roomId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Individual messages in a room"
     }
   }
 }

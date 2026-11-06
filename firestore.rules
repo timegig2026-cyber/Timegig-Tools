@@ -34,7 +34,7 @@ service cloud.firestore {
 
     // 3. Entity Validations
     function isValidUser(data) {
-      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'activatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups', 'socialLinks', 'isFrozen'];
+      let allowedKeys = ['userId', 'email', 'firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'lastProfilePicUpdate', 'planType', 'isActivated', 'profilePicUrl', 'invitedBy', 'referralStatus', 'createdAt', 'updatedAt', 'activatedAt', 'isAdmin', 'tenantCapacity', 'userCapacity', 'tenantSubSignups', 'userSubSignups', 'socialLinks', 'isFrozen', 'lastSeenAt'];
       return data.keys().hasAll(['userId', 'email']) &&
              data.keys().hasOnly(allowedKeys) &&
              data.userId is string && data.userId.size() <= 128 &&
@@ -56,7 +56,8 @@ service cloud.firestore {
              (!data.keys().hasAny(['tenantSubSignups']) || data.tenantSubSignups is number) &&
              (!data.keys().hasAny(['userSubSignups']) || data.userSubSignups is number) &&
              (!data.keys().hasAny(['socialLinks']) || data.socialLinks is list) &&
-             (!data.keys().hasAny(['isFrozen']) || data.isFrozen is bool);
+             (!data.keys().hasAny(['isFrozen']) || data.isFrozen is bool) &&
+             (!data.keys().hasAny(['lastSeenAt']) || data.lastSeenAt is timestamp || data.lastSeenAt == null);
     }
 
     function isValidSetting(data) {
@@ -84,6 +85,23 @@ service cloud.firestore {
              data.destination.name is string && data.destination.name.size() <= 256;
     }
 
+    function isValidChatRoom(data) {
+      let allowedKeys = ['participants', 'lastMessage', 'lastMessageAt'];
+      return data.keys().hasAll(['participants']) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.participants is list && data.participants.size() == 2 &&
+             data.participants[0] is string && data.participants[1] is string;
+    }
+
+    function isValidChatMessage(data) {
+      let allowedKeys = ['text', 'senderId', 'senderEmail', 'createdAt'];
+      return data.keys().hasAll(['text', 'senderId', 'senderEmail']) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.text is string && data.text.size() <= 1000 &&
+             data.senderId == request.auth.uid &&
+             data.senderEmail is string;
+    }
+
     // 4. Collection Matches
     match /users/{userId} {
       allow get: if isSignedIn();
@@ -96,7 +114,7 @@ service cloud.firestore {
       allow update: if (isOwner(userId) || isAdmin() || (isSignedIn() && existing().invitedBy == request.auth.uid)) && isValidUser(incoming()) && (
         // Action: Profile Update (Owner only, restricted fields, cannot change isAdmin)
         (isOwner(userId) && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'profilePicUrl', 'lastProfilePicUpdate', 'planType', 'isActivated', 'activatedAt', 'updatedAt']) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'phone', 'locationName', 'locationCoords', 'profilePicUrl', 'lastProfilePicUpdate', 'planType', 'isActivated', 'activatedAt', 'updatedAt', 'lastSeenAt']) && 
          (!incoming().keys().hasAny(['isAdmin']) || incoming().isAdmin == existing().isAdmin)) ||
         // Action: Tenant approve/reject referral or freeze/unfreeze account
         ((isSignedIn() && (existing().invitedBy == request.auth.uid || request.auth.token.email == 'timegig2026@gmail.com')) && incoming().diff(existing()).affectedKeys().hasOnly(['referralStatus', 'isFrozen', 'updatedAt'])) ||
@@ -136,6 +154,22 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin();
+    }
+
+    match /chatRooms/{roomId} {
+      function isChatParticipant() {
+        return isSignedIn() && request.auth.uid in existing().participants;
+      }
+
+      allow get, list: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && isValidChatRoom(incoming()) && request.auth.uid in incoming().participants;
+      allow update: if isChatParticipant() && isValidChatRoom(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt']);
+
+      match /messages/{messageId} {
+        allow read, list: if isChatParticipant();
+        allow create: if isChatParticipant() && isValidChatMessage(incoming());
+      }
     }
   }
 }

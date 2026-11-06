@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet, Share2, Copy, Bell, Users, CheckCircle2, ChevronRight, X, Trash2, CheckSquare, Square, Info, ArrowLeft } from 'lucide-react';
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, serverTimestamp, query, collection, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { OperationType, handleFirestoreError } from '../utils/firestoreDiagnostics';
 
@@ -12,6 +12,7 @@ interface TenantViewProps {
   referrals: any[];
   playClickSound: () => void;
   onNavigateToReferrals?: () => void;
+  onNavigateToSeekers?: () => void;
 }
 
 export const TenantView: React.FC<TenantViewProps> = ({ 
@@ -21,12 +22,27 @@ export const TenantView: React.FC<TenantViewProps> = ({
   currentUser, 
   referrals = [],
   playClickSound,
-  onNavigateToReferrals
+  onNavigateToReferrals,
+  onNavigateToSeekers
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [pendingGigs, setPendingGigs] = useState<any[]>([]);
+
+  // Sync pending hiring requests (gigs) from Firestore
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, 'gigs'),
+      where('seekerId', '==', currentUser.uid),
+      where('status', '==', 'pending')
+    );
+    return onSnapshot(q, (snap) => {
+      setPendingGigs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'gigs (pending)'));
+  }, [currentUser?.uid]);
 
   // Sync deleted notifications list from Firestore settings
   useEffect(() => {
@@ -49,7 +65,20 @@ export const TenantView: React.FC<TenantViewProps> = ({
     return !deletedIds.includes(id);
   });
 
-  const unreadCount = activeAlerts.filter(r => !r.referralStatus || r.referralStatus === 'pending').length;
+  // Combine alerts: Referrals + Gigs
+  const combinedAlerts = [
+    ...activeAlerts.map(r => ({ ...r, type: 'referral' })),
+    ...pendingGigs.map(g => ({ ...g, type: 'hiring' }))
+  ].filter(a => {
+    const id = a.userId || a.email || a.id;
+    return !deletedIds.includes(id);
+  });
+
+  const unreadCount = combinedAlerts.filter(a => {
+    if (a.type === 'referral') return !a.referralStatus || a.referralStatus === 'pending';
+    if (a.type === 'hiring') return a.status === 'pending';
+    return false;
+  }).length;
 
   const handleToggleNotifications = () => {
     playClickSound();
@@ -67,10 +96,10 @@ export const TenantView: React.FC<TenantViewProps> = ({
 
   const handleSelectAll = () => {
     playClickSound();
-    if (selectedIds.length === activeAlerts.length) {
+    if (selectedIds.length === combinedAlerts.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(activeAlerts.map(r => r.userId || r.email));
+      setSelectedIds(combinedAlerts.map(a => a.userId || a.email || a.id));
     }
   };
 
@@ -191,9 +220,9 @@ export const TenantView: React.FC<TenantViewProps> = ({
                 <Bell className="w-6 h-6 text-white" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-lg font-bold truncate">Referral Notifications</h2>
+                <h2 className="text-lg font-bold truncate">Activity Notifications</h2>
                 <p className="text-xs text-slate-400 truncate">
-                  {activeAlerts.length} total alerts ({unreadCount} pending review)
+                  {combinedAlerts.length} total alerts ({unreadCount} new)
                 </p>
               </div>
             </div>
@@ -208,19 +237,19 @@ export const TenantView: React.FC<TenantViewProps> = ({
           </div>
 
           {/* Action Toolbar (Select / Delete) */}
-          {activeAlerts.length > 0 && (
+          {combinedAlerts.length > 0 && (
             <div className="py-3 flex items-center justify-between gap-3 shrink-0 border-b border-white/10 text-xs">
               <button
                 onClick={handleSelectAll}
                 className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold border border-white/15 flex items-center gap-2 active:scale-95 transition-all"
               >
-                {selectedIds.length === activeAlerts.length ? (
+                {selectedIds.length === combinedAlerts.length ? (
                   <CheckSquare className="w-4 h-4 text-blue-400" />
                 ) : (
                   <Square className="w-4 h-4 text-slate-400" />
                 )}
                 <span>
-                  {selectedIds.length === activeAlerts.length ? 'Deselect All' : 'Select All'}
+                  {selectedIds.length === combinedAlerts.length ? 'Deselect All' : 'Select All'}
                 </span>
               </button>
 
@@ -237,21 +266,22 @@ export const TenantView: React.FC<TenantViewProps> = ({
 
           {/* Scrollable Notifications List */}
           <div className="flex-1 overflow-y-auto py-4 space-y-3">
-            {activeAlerts.length === 0 ? (
+            {combinedAlerts.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 space-y-3">
                 <CheckCircle2 className="w-16 h-16 text-emerald-500/80" />
                 <div>
                   <h3 className="text-base font-bold text-white">All Caught Up!</h3>
                   <p className="text-xs text-slate-400 max-w-xs mx-auto mt-1">
-                    You have no referral notifications. New user signups under your link will appear here.
+                    You have no notifications. New hiring requests and referrals will appear here.
                   </p>
                 </div>
               </div>
             ) : (
-              activeAlerts.map((ref, idx) => {
-                const id = ref.userId || ref.email || String(idx);
+              combinedAlerts.map((item, idx) => {
+                const id = item.userId || item.email || item.id || String(idx);
                 const isSelected = selectedIds.includes(id);
-                const status = ref.referralStatus || 'pending';
+                const isHiring = item.type === 'hiring';
+                const status = isHiring ? item.status : (item.referralStatus || 'pending');
 
                 return (
                   <div 
@@ -275,35 +305,39 @@ export const TenantView: React.FC<TenantViewProps> = ({
                     {/* Avatar / Info */}
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-bold truncate text-white">{ref.email}</p>
+                        <p className="text-sm font-bold truncate text-white">
+                          {isHiring ? `Gig Request from User` : item.email}
+                        </p>
                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border shrink-0 ${
-                          status === 'approved' 
+                          status === 'approved' || status === 'accepted'
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            : status === 'rejected'
+                            : status === 'rejected' || status === 'cancelled'
                             ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                             : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                         }`}>
-                          {status}
+                          {isHiring ? 'Hiring' : status}
                         </span>
                       </div>
 
                       <p className="text-xs text-slate-300 truncate">
-                        Joined via tenant link ({ref.planType || 'User'} Subscription)
+                        {isHiring 
+                          ? `Wants to hire you for a gig at ${item.destination?.name}` 
+                          : `Joined via tenant link (${item.planType || 'User'} Sub)`}
                       </p>
                     </div>
 
                     {/* Quick Review / Delete Buttons */}
                     <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {onNavigateToReferrals && (
+                      {(isHiring ? onNavigateToSeekers : onNavigateToReferrals) && (
                         <button
                           onClick={() => {
                             playClickSound();
                             setShowNotifications(false);
-                            onNavigateToReferrals();
+                            isHiring ? onNavigateToSeekers?.() : onNavigateToReferrals?.();
                           }}
                           className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow"
                         >
-                          <span>Review</span>
+                          <span>{isHiring ? 'View' : 'Review'}</span>
                           <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { 
-  doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, limit, addDoc
+  doc, onSnapshot, updateDoc, serverTimestamp, collection, query, where, limit, addDoc, getDocs
 } from 'firebase/firestore';
 import { auth, db } from './lib/firebase';
 
@@ -17,13 +17,14 @@ import {
 } from './types/map';
 import { TILE_PROVIDERS } from './utils/geo';
 import { 
-  LogOut, Volume2, VolumeX, Settings, Building2, Users, Map as MapIcon, Search, User, BellRing, X, ExternalLink
+  LogOut, Volume2, VolumeX, Settings, Building2, Users, Map as MapIcon, Search, User, BellRing, X, ExternalLink, MessageSquare, CheckCircle2, XCircle
 } from 'lucide-react';
 
 import { TenantView } from './components/TenantView';
 import { ReferralsView } from './components/ReferralsView';
 import { SeekersView } from './components/SeekersView';
 import { ProfileView } from './components/ProfileView';
+import { ChatView } from './components/ChatView';
 
 const MapView = lazy(() => import('./components/MapView').then(m => ({ default: m.MapView })));
 const AuthView = lazy(() => import('./components/Auth').then(m => ({ default: m.AuthView })));
@@ -64,6 +65,8 @@ export default function App() {
   const [userProfit, setUserProfit] = useState(0);
   const [totalProfit, setTotalProfit] = useState(0);
   const [incomingGig, setIncomingGig] = useState<any>(null);
+  const [userProfilePic, setUserProfilePic] = useState<string | null>(null);
+  const [activeChatRoomId, setActiveChatRoomId] = useState<string | null>(null);
   const lastNotifiedGigId = useRef<string | null>(null);
 
   const clickAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -115,6 +118,16 @@ export default function App() {
         setIsHudMinimized(d.isHudMinimized ?? false);
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `settings/${currentUser.uid}`));
+  }, [currentUser?.uid]);
+
+  // Sync Current User Profile Pic
+  useEffect(() => {
+    if (!currentUser) return;
+    return onSnapshot(doc(db, 'users', currentUser.uid), (snap) => {
+      if (snap.exists()) {
+        setUserProfilePic(snap.data().profilePicUrl || null);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`));
   }, [currentUser?.uid]);
 
   // Sync Referrals and Calculate Profit
@@ -187,7 +200,7 @@ export default function App() {
   // Sync Seekers (All activated users)
   useEffect(() => {
     if (!currentUser) return;
-    const q = query(collection(db, 'users'), where('isActivated', '==', true), limit(50));
+    const q = query(collection(db, 'users'), where('isActivated', '==', true), limit(100));
     return onSnapshot(q, (snap) => setSeekers(snap.docs.map(d => d.data())), (err) => handleFirestoreError(err, OperationType.LIST, 'users (seekers)'));
   }, [currentUser]);
 
@@ -219,6 +232,44 @@ export default function App() {
     s.userId !== currentUser?.uid && 
     (s.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+  
+  const handleStartChat = async (seeker: any) => {
+    if (!currentUser) return;
+    playClickSound();
+    
+    // Check if room exists
+    const q = query(
+      collection(db, 'chatRooms'),
+      where('participants', 'array-contains', currentUser.uid)
+    );
+    
+    try {
+      const snap = await getDocs(q);
+      let roomId = null;
+      
+      snap.docs.forEach(d => {
+        const p = d.data().participants;
+        if (p.includes(seeker.userId)) {
+          roomId = d.id;
+        }
+      });
+      
+      if (!roomId) {
+        const newRoom = await addDoc(collection(db, 'chatRooms'), {
+          participants: [currentUser.uid, seeker.userId],
+          lastMessage: '',
+          lastMessageAt: serverTimestamp(),
+          createdAt: serverTimestamp()
+        });
+        roomId = newRoom.id;
+      }
+      
+      setActiveChatRoomId(roomId);
+      setActiveView('chat');
+    } catch (e) {
+      console.error('Error starting chat:', e);
+    }
+  };
 
   const hireSeeker = async (seeker: any) => {
     if (!currentUser || !userLocation) return;
@@ -236,6 +287,70 @@ export default function App() {
     } catch (e) { 
       handleFirestoreError(e, OperationType.CREATE, 'gigs');
       setHiringSeekerId(null); 
+    }
+  };
+
+  const startNavigation = async (dest: { lat: number, lon: number, name: string }) => {
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${userLocation?.longitude || 18.4241},${userLocation?.latitude || -33.9249};${dest.lon},${dest.lat}?overview=full&geometries=geojson`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.routes?.[0]) {
+          const r = data.routes[0];
+          setNavigationRoute({ 
+            coordinates: r.geometry.coordinates.map(([lo, la]: [number, number]) => [la, lo] as [number, number]), 
+            name: dest.name, 
+            distanceKm: r.distance / 1000, 
+            durationMins: Math.round(r.duration / 60), 
+            arrivalTimeStr: new Date(Date.now() + r.duration * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Navigation error:', e);
+    }
+  };
+
+  const handleAcceptGig = async (gig: any) => {
+    playClickSound();
+    try {
+      await updateDoc(doc(db, 'gigs', gig.id), {
+        status: 'accepted',
+        updatedAt: serverTimestamp()
+      });
+      setIncomingGig(null);
+      setActiveView(null); // Direct to map
+      startNavigation(gig.destination);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `gigs/${gig.id}`);
+    }
+  };
+
+  const handleDeclineGig = async (gig: any) => {
+    playClickSound();
+    try {
+      await updateDoc(doc(db, 'gigs', gig.id), {
+        status: 'cancelled',
+        cancelReason: 'Declined by Seeker',
+        cancelledBy: currentUser?.uid,
+        updatedAt: serverTimestamp()
+      });
+      setIncomingGig(null);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `gigs/${gig.id}`);
+    }
+  };
+
+  const handleCompleteGig = async (gig: any) => {
+    playClickSound();
+    try {
+      await updateDoc(doc(db, 'gigs', gig.id), {
+        status: 'completed',
+        updatedAt: serverTimestamp()
+      });
+      setNavigationRoute(null);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `gigs/${gig.id}`);
     }
   };
 
@@ -261,6 +376,13 @@ export default function App() {
         const c = { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy, altitude: p.coords.altitude, altitudeAccuracy: p.coords.altitudeAccuracy, heading: p.coords.heading, speed: p.coords.speed, timestamp: p.timestamp };
         setUserLocation(c); setGeoStatus('active');
         setTrackPoints(prev => { const last = prev[prev.length - 1]; if (!last || Math.abs(last[0] - c.latitude) > 0.0001 || Math.abs(last[1] - c.longitude) > 0.0001) return [...prev, [c.latitude, c.longitude]]; return prev; });
+        
+        // Sync live location to Firestore for other users to see
+        updateDoc(doc(db, 'users', currentUser.uid), {
+          locationCoords: { lat: c.latitude, lon: c.longitude },
+          lastSeenAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }).catch(e => console.error('Error syncing location:', e));
       }, (e) => console.warn(e), { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 });
     } else if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
     return () => { if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current); };
@@ -283,13 +405,29 @@ export default function App() {
   return (
     <div className="fixed inset-0 h-[100dvh] w-full max-w-full overflow-hidden bg-slate-950 font-sans flex flex-col">
       <div className="relative flex-1 h-full w-full overflow-hidden">
-        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-[130] w-[92%] sm:w-[480px] md:w-[540px] max-w-xl">
+        <div className="absolute top-[max(0.75rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-[130] w-[92%] sm:w-[540px] flex items-center gap-2">
           {activeView !== 'tenant' && (
-            activeView === 'referrals' || activeView === 'seekers' ? (
-              <SearchBox placeholder={`Search ${activeView}...`} onSelectLocation={(_, __, name) => setSearchQuery(name)} className="w-full shadow-xl" />
-            ) : (
-              <SearchBox onSelectLocation={(lat, lon, name) => { setHighlightLocation({ lat, lon, name }); setPendingDestination({ lat, lon, name }); }} />
-            )
+            <>
+              <button 
+                onClick={() => handleIconClick('profile')}
+                className={`w-12 h-12 rounded-2xl border-2 flex items-center justify-center overflow-hidden shrink-0 transition-all active:scale-90 shadow-xl ${
+                  activeView === 'profile' ? 'border-blue-500 bg-blue-600/10' : 'border-white/20 bg-slate-900/90 backdrop-blur-md'
+                }`}
+              >
+                {userProfilePic ? (
+                  <img src={userProfilePic} className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-6 h-6 text-white" />
+                )}
+              </button>
+              <div className="flex-1">
+                {activeView === 'referrals' || activeView === 'seekers' ? (
+                  <SearchBox placeholder={`Search ${activeView}...`} onSelectLocation={(_, __, name) => setSearchQuery(name)} className="w-full shadow-xl" />
+                ) : (
+                  <SearchBox onSelectLocation={(lat, lon, name) => { setHighlightLocation({ lat, lon, name }); setPendingDestination({ lat, lon, name }); }} />
+                )}
+              </div>
+            </>
           )}
         </div>
 
@@ -335,16 +473,16 @@ export default function App() {
                 </p>
                 <div className="flex items-center gap-2 mt-4">
                   <button 
-                    onClick={() => { playClickSound(); setIncomingGig(null); setActiveView('seekers'); }}
-                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                    onClick={() => handleAcceptGig(incomingGig)}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5"
                   >
-                    View Request <ExternalLink className="w-3 h-3" />
+                    Accept Gig <CheckCircle2 className="w-3 h-3" />
                   </button>
                   <button 
-                    onClick={() => { playClickSound(); setIncomingGig(null); }}
-                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-black uppercase rounded-xl transition-all active:scale-95"
+                    onClick={() => handleDeclineGig(incomingGig)}
+                    className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5"
                   >
-                    Dismiss
+                    Decline <XCircle className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -393,6 +531,7 @@ export default function App() {
                 referrals={referrals}
                 playClickSound={playClickSound}
                 onNavigateToReferrals={() => setActiveView('referrals')}
+                onNavigateToSeekers={() => setActiveView('seekers')}
               />
             )}
             {activeView === 'referrals' && (
@@ -410,9 +549,12 @@ export default function App() {
                 activeGig={activeGig}
                 hiringSeekerId={hiringSeekerId}
                 hireSeeker={hireSeeker}
-                completeGig={() => {}}
-                acceptGig={() => {}}
+                completeGig={() => activeGig && handleCompleteGig(activeGig)}
+                acceptGig={() => activeGig && handleAcceptGig(activeGig)}
+                declineGig={() => activeGig && handleDeclineGig(activeGig)}
                 setShowCancelDialog={() => {}}
+                onStartChat={handleStartChat}
+                currentUserId={currentUser.uid}
               />
             )}
             {activeView === 'profile' && (
@@ -420,6 +562,13 @@ export default function App() {
                 currentUser={currentUser}
                 playClickSound={playClickSound}
                 onOpenSettings={() => setShowSettings(true)}
+              />
+            )}
+            {activeView === 'chat' && (
+              <ChatView 
+                currentUser={currentUser}
+                playClickSound={playClickSound}
+                initialRoomId={activeChatRoomId}
               />
             )}
           </div>
@@ -451,6 +600,8 @@ export default function App() {
             navigationRoute={navigationRoute} 
             onCancelNavigation={() => setNavigationRoute(null)} 
             playClickSound={playClickSound}
+            userProfilePic={userProfilePic}
+            otherUsers={seekers}
           />
         </Suspense>
 
@@ -475,9 +626,9 @@ export default function App() {
               <Search className="w-5 h-5" />
               <span className="text-[9px] font-bold uppercase">Seekers</span>
             </button>
-            <button onClick={() => handleIconClick('profile')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'profile' ? 'text-blue-600 scale-110 font-extrabold' : 'text-black dark:text-white'}`}>
-              <User className="w-5 h-5" />
-              <span className="text-[9px] font-bold uppercase">Profile</span>
+            <button onClick={() => handleIconClick('chat')} className={`flex flex-col items-center gap-1 flex-1 transition-all ${activeView === 'chat' ? 'text-blue-600 scale-110 font-extrabold' : 'text-black dark:text-white'}`}>
+              <MessageSquare className="w-5 h-5" />
+              <span className="text-[9px] font-bold uppercase">Chat</span>
             </button>
           </div>
         </div>
