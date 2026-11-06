@@ -17,7 +17,7 @@ import {
 } from './types/map';
 import { TILE_PROVIDERS } from './utils/geo';
 import { 
-  LogOut, Volume2, VolumeX, Settings, Building2, Users, Map as MapIcon, Search, User
+  LogOut, Volume2, VolumeX, Settings, Building2, Users, Map as MapIcon, Search, User, BellRing, X, ExternalLink
 } from 'lucide-react';
 
 import { TenantView } from './components/TenantView';
@@ -63,17 +63,30 @@ export default function App() {
   const [tenantProfit, setTenantProfit] = useState(0);
   const [userProfit, setUserProfit] = useState(0);
   const [totalProfit, setTotalProfit] = useState(0);
+  const [incomingGig, setIncomingGig] = useState<any>(null);
+  const lastNotifiedGigId = useRef<string | null>(null);
 
   const clickAudioRef = useRef<HTMLAudioElement | null>(null);
+  const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     clickAudioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
     clickAudioRef.current.volume = 0.4;
     clickAudioRef.current.load();
+
+    notificationAudioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/3124/3124-preview.mp3');
+    notificationAudioRef.current.volume = 0.5;
+    notificationAudioRef.current.load();
   }, []);
 
   const playClickSound = () => {
     if (!isSoundEnabled || !clickAudioRef.current) return;
     try { clickAudioRef.current.currentTime = 0; clickAudioRef.current.play().catch(() => {}); } catch (e) {}
+  };
+
+  const playNotificationSound = () => {
+    if (!isSoundEnabled || !notificationAudioRef.current) return;
+    try { notificationAudioRef.current.currentTime = 0; notificationAudioRef.current.play().catch(() => {}); } catch (e) {}
   };
 
   const handleIconClick = (view: string) => {
@@ -178,6 +191,30 @@ export default function App() {
     return onSnapshot(q, (snap) => setSeekers(snap.docs.map(d => d.data())), (err) => handleFirestoreError(err, OperationType.LIST, 'users (seekers)'));
   }, [currentUser]);
 
+  // Listen for Incoming Gigs (Hiring Requests)
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, 'gigs'),
+      where('seekerId', '==', currentUser.uid),
+      where('status', '==', 'pending'),
+      limit(5)
+    );
+    
+    return onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const gig = { id: change.doc.id, ...change.doc.data() };
+          if (lastNotifiedGigId.current !== gig.id) {
+            setIncomingGig(gig);
+            playNotificationSound();
+            lastNotifiedGigId.current = gig.id;
+          }
+        }
+      });
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'gigs (incoming)'));
+  }, [currentUser?.uid]);
+
   const filteredSeekers = seekers.filter(s => 
     s.userId !== currentUser?.uid && 
     (s.email.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -281,6 +318,43 @@ export default function App() {
             <button onClick={handleLogout} className="w-full py-2.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors">
               <LogOut className="w-4 h-4" /> Log Out ({currentUser.email})
             </button>
+          </div>
+        )}
+
+        {/* Hiring Request Notification Overlay */}
+        {incomingGig && (
+          <div className="absolute top-[max(1rem,env(safe-area-inset-top,0px))] left-1/2 -translate-x-1/2 z-[200] w-[94%] sm:w-[420px] bg-slate-900/95 backdrop-blur-2xl border border-blue-500/30 rounded-3xl p-5 shadow-2xl animate-in fade-in slide-in-from-top-10 duration-500">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-500/20 shrink-0">
+                <BellRing className="w-6 h-6 text-white animate-bounce" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-black text-white uppercase tracking-tight">New Hiring Request!</h3>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  Someone wants to hire you for a gig! Head over to the Seekers tab to review and accept the request.
+                </p>
+                <div className="flex items-center gap-2 mt-4">
+                  <button 
+                    onClick={() => { playClickSound(); setIncomingGig(null); setActiveView('seekers'); }}
+                    className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5"
+                  >
+                    View Request <ExternalLink className="w-3 h-3" />
+                  </button>
+                  <button 
+                    onClick={() => { playClickSound(); setIncomingGig(null); }}
+                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-black uppercase rounded-xl transition-all active:scale-95"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+              <button 
+                onClick={() => { playClickSound(); setIncomingGig(null); }}
+                className="p-1 text-slate-500 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         )}
 
